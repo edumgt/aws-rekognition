@@ -2,7 +2,7 @@
 
 이 문서는 이 저장소를 **실습 중심으로 재구성**한 최신 가이드입니다.  
 목표는 아래 3가지를 한 번에 수행하는 것입니다.
-
+ 
 1. `server` 기반 Node.js 코드로 Rekognition 실습 환경 구성
 2. `face1.png ~ face4.png` 업로드 및 유사성 분석을 **AWS Lambda**로 실행
 3. `scripts/aws_batch_ops.sh` 하나로 **버킷 준비 → Lambda 배포/호출 → 결과 수집** 자동화
