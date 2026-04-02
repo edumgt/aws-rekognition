@@ -2,8 +2,13 @@
 const fs = require('fs');
 // 샘플 이미지 절대 경로 계산에 사용할 path 모듈입니다.
 const path = require('path');
+// Linux/WSL 런타임에서만 직접 실행되도록 보호합니다.
+const { ensureLinuxRuntime } = require('./src/runtimeGuard');
 // Rekognition 클라이언트 생성 함수를 가져옵니다.
 const { getRekognition } = require('./src/awsClients');
+
+// Windows Node.js로 직접 실행되는 실수를 빠르게 차단합니다.
+ensureLinuxRuntime('extract');
 
 // 텍스트 추출 CLI 진입점입니다.
 async function main() {

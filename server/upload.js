@@ -1,7 +1,12 @@
 // 실행 위치 기준 경로 처리를 위해 path 모듈을 가져옵니다.
 const path = require('path');
+// Linux/WSL 런타임에서만 직접 실행되도록 보호합니다.
+const { ensureLinuxRuntime } = require('./src/runtimeGuard');
 // 얼굴 업로드 워크플로 함수를 가져옵니다.
 const { uploadFaces } = require('./src/faceWorkflow');
+
+// Windows Node.js로 직접 실행되는 실수를 빠르게 차단합니다.
+ensureLinuxRuntime('upload');
 
 // CLI 실행 진입점 함수입니다.
 async function main() {

@@ -32,8 +32,8 @@
 │  │  ├─ fileUtils.js          # 이미지 파일 로딩 유틸
 │  │  └─ faceWorkflow.js       # 얼굴 업로드 + 얼굴 비교 비즈니스 로직
 │  ├─ lambda/
-│  │  ├─ uploadFacesHandler.js # Lambda: face1~4 S3 업로드
-│  │  └─ compareFacesHandler.js# Lambda: face1~4 유사도 비교
+│  │  ├─ uploadFacesHandler.js # Lambda: face1~6 S3 업로드
+│  │  └─ compareFacesHandler.js# Lambda: face1~6 유사도 비교
 │  ├─ upload.js                # 로컬 실행용 업로드 엔트리
 │  ├─ compare.js               # 로컬 실행용 비교 엔트리
 │  ├─ extract.js               # 텍스트 감지 샘플
@@ -53,7 +53,7 @@
   - Rekognition: `CompareFaces`, `DetectText`
   - IAM: Lambda 생성 시 Role 조회 권한
 - 로컬 도구
-  - Node.js 18+
+  - WSL Ubuntu 내부의 Node.js 18+
   - npm
   - AWS CLI v2
   - zip 명령어
@@ -70,7 +70,7 @@ AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 S3_BUCKET_NAME=polly-bucket-edumgt
 SIMILARITY_THRESHOLD=80
-FACE_FILES=face1.png,face2.png,face3.png,face4.png
+FACE_FILES=face1.png,face2.png,face3.png,face4.png,face5.png,face6.png
 ```
 
 > 실제 운영에서는 Access Key보다 IAM Role(예: EC2/CloudShell/Lambda 실행 역할)을 우선 권장합니다.
@@ -78,17 +78,25 @@ FACE_FILES=face1.png,face2.png,face3.png,face4.png
 ---
 
 ## 4) 로컬 실행(빠른 검증)
+#### WSL Node.js 설치 및 확인
+
 
 ```bash
 cd server
+/usr/bin/node -v
+/usr/bin/npm -v
 npm install
 npm run upload:faces
 npm run compare:faces
 npm run extract
 ```
 
-- `upload:faces`: `training/face1~4.png` 경로로 S3 업로드
-- `compare:faces`: face1~4를 조합 비교하여 유사도 출력
+- 이 저장소의 Node.js 스크립트는 Linux/WSL 런타임 기준으로 정리되어 있습니다.
+- WSL 터미널에서 `npm run ...`을 실행하면 되고, 경로 충돌이 있을 때는 `/usr/bin/npm run <script>`를 우선 사용하세요.
+- Windows Node.js가 직접 실행되면 즉시 중단하고 WSL 실행 방법을 안내합니다.
+
+- `upload:faces`: `training/face1~6.png` 경로로 S3 업로드
+- `compare:faces`: face1~6를 조합 비교하여 유사도 출력
 - `extract`: `sample.png` 텍스트 검출
 
 ---
@@ -135,7 +143,7 @@ aws lambda get-function --region ap-northeast-2 --function-name rekognition-face
 # 버킷 초기화(없으면 생성, 암호화/lifecycle 적용)
 ./scripts/aws_batch_ops.sh init
 
-# 샘플 파일 업로드(face1~4 + sample)
+# 샘플 파일 업로드(face1~6 + sample)
 ./scripts/aws_batch_ops.sh upload
 
 # Lambda 배포 zip 생성
@@ -289,7 +297,7 @@ aws lambda wait function-updated \
 - `WORK_DIR`: zip/리포트 출력 경로(기본 `./batch-work`)
 - `LAMBDA_ROLE_ARN`: Lambda 생성 시 필요
 - `LAMBDA_UPLOAD_FUNCTION`: 업로드 함수명 기본값
-- `LAMBDA_COMPARE_FUNCTION`: 샘플 face1~4 비교 함수명 기본값
+- `LAMBDA_COMPARE_FUNCTION`: 샘플 face1~6 비교 함수명 기본값
 - `LAMBDA_COMPARE_UPLOAD_FUNCTION`: 웹 업로드 이미지 비교 함수명 기본값
 - `LAMBDA_TEXT_FUNCTION`: 웹 텍스트 추출 함수명 기본값
 
@@ -303,7 +311,7 @@ aws lambda wait function-updated \
 
 - [ ] `aws sts get-caller-identity` 정상 응답
 - [ ] `init` 후 버킷 암호화, lifecycle 정책 적용 확인
-- [ ] `upload` 후 `training/face1~4.png` 존재 확인
+- [ ] `upload` 후 `training/face1~6.png` 존재 확인
 - [ ] `lambda-deploy` 성공 로그 확인
 - [ ] `lambda-invoke` 결과 JSON에서 유사도 값 확인
 - [ ] `report` 파일 생성 확인

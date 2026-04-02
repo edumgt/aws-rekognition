@@ -23,7 +23,7 @@ function getConfig() {
     // Rekognition 비교 임계값을 숫자로 변환하며 기본값은 80입니다.
     similarityThreshold: Number(process.env.SIMILARITY_THRESHOLD || 80),
     // 비교 대상 파일 목록은 쉼표 문자열을 배열로 분해해 공백/빈 값을 제거합니다.
-    faceFiles: (process.env.FACE_FILES || 'face1.png,face2.png,face3.png,face4.png')
+    faceFiles: (process.env.FACE_FILES || 'face1.png,face2.png,face3.png,face4.png,face5.png,face6.png')
       .split(',')
       .map((name) => name.trim())
       .filter(Boolean),

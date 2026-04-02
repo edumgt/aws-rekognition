@@ -4,17 +4,17 @@
   "description": "Korea IT Education",
   "main": "index.js",
   "scripts": {
-    "extract": "node extract.js",
-    "compare": "node compare.js",
-    "upload": "node upload.js",
-    "upload:faces": "node upload.js",
-    "compare:faces": "node compare.js",
-    "lambda:upload:local": "node -e \"require('./lambda/uploadFacesHandler').handler().then((r)=>console.log(r.body)).catch((e)=>{console.error(e);process.exit(1);})\"",
-    "lambda:compare:local": "node -e \"require('./lambda/compareFacesHandler').handler().then((r)=>console.log(r.body)).catch((e)=>{console.error(e);process.exit(1);})\"",
+    "extract": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('extract.js')\"",
+    "compare": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('compare.js')\"",
+    "upload": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('upload.js')\"",
+    "upload:faces": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('upload.js')\"",
+    "compare:faces": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('compare.js')\"",
+    "lambda:upload:local": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('local/uploadFacesLocal.js')\"",
+    "lambda:compare:local": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('local/compareFacesLocal.js')\"",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "web": "node web/app.js",
-    "lambda:compare:upload:local": "node -e \"require('./lambda/compareUploadedFacesHandler').handler({sourceImageBase64: require('fs').readFileSync('face1.png').toString('base64'), targetImageBase64: require('fs').readFileSync('face2.png').toString('base64')}).then((r)=>console.log(r.body)).catch((e)=>{console.error(e);process.exit(1);})\"",
-    "lambda:text:local": "node -e \"require('./lambda/detectTextHandler').handler({imageBase64: require('fs').readFileSync('sample.png').toString('base64')}).then((r)=>console.log(r.body)).catch((e)=>{console.error(e);process.exit(1);})\""
+    "web": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('web/app.js')\"",
+    "lambda:compare:upload:local": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('local/compareUploadedFacesLocal.js')\"",
+    "lambda:text:local": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('local/detectTextLocal.js')\""
   },
   "repository": {
     "type": "git",

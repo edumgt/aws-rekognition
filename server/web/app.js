@@ -6,8 +6,13 @@ const fs = require('fs');
 const path = require('path');
 // Lambda 호출을 위해 AWS SDK를 사용합니다.
 const AWS = require('aws-sdk');
+// Linux/WSL 런타임에서만 웹 데모를 시작하도록 보호합니다.
+const { ensureLinuxRuntime } = require('../src/runtimeGuard');
 // 공통 환경 설정 유틸리티를 불러옵니다.
 const { getConfig } = require('../src/config');
+
+// Windows Node.js로 직접 실행되는 실수를 빠르게 차단합니다.
+ensureLinuxRuntime('web');
 
 // AWS 리전은 환경 변수 우선, 없으면 공통 설정에서 가져옵니다.
 const region = process.env.AWS_REGION || getConfig().region;

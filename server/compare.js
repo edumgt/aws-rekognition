@@ -1,5 +1,9 @@
 // 얼굴 비교 워크플로 함수를 가져옵니다.
+const { ensureLinuxRuntime } = require('./src/runtimeGuard');
 const { compareFaces } = require('./src/faceWorkflow');
+
+// Windows Node.js로 직접 실행되는 실수를 빠르게 차단합니다.
+ensureLinuxRuntime('compare');
 
 // CLI 실행 진입점입니다.
 async function main() {
