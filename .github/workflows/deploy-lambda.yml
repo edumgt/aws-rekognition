@@ -1,0 +1,90 @@
+name: Deploy Lambda Functions
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/**'
+
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  NODE_VERSION: '18'
+
+jobs:
+  deploy:
+    name: Package & Deploy Lambda
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - function_name_secret: LAMBDA_FUNCTION_COMPARE_FACES
+            handler: lambda/compareFacesHandler.handler
+            description: compareFacesHandler
+          - function_name_secret: LAMBDA_FUNCTION_COMPARE_UPLOADED_FACES
+            handler: lambda/compareUploadedFacesHandler.handler
+            description: compareUploadedFacesHandler
+          - function_name_secret: LAMBDA_FUNCTION_DETECT_TEXT
+            handler: lambda/detectTextHandler.handler
+            description: detectTextHandler
+          - function_name_secret: LAMBDA_FUNCTION_UPLOAD_FACES
+            handler: lambda/uploadFacesHandler.handler
+            description: uploadFacesHandler
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install production dependencies
+        working-directory: server
+        run: npm ci --omit=dev
+
+      - name: Create deployment package (zip)
+        working-directory: server
+        run: |
+          zip -r ../lambda-${{ matrix.description }}.zip \
+            lambda/ \
+            src/ \
+            node_modules/ \
+            package.json \
+            --exclude "*.test.js" \
+            --exclude "local/*" \
+            --exclude "web/*"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to AWS Lambda
+        env:
+          FUNCTION_NAME: ${{ secrets[matrix.function_name_secret] }}
+        run: |
+          aws lambda update-function-code \
+            --function-name "$FUNCTION_NAME" \
+            --zip-file fileb://lambda-${{ matrix.description }}.zip
+
+      - name: Update Lambda handler configuration
+        env:
+          FUNCTION_NAME: ${{ secrets[matrix.function_name_secret] }}
+        run: |
+          # Wait until the previous update is complete before updating config
+          aws lambda wait function-updated \
+            --function-name "$FUNCTION_NAME"
+          aws lambda update-function-configuration \
+            --function-name "$FUNCTION_NAME" \
+            --handler "${{ matrix.handler }}" \
+            --runtime nodejs18.x
