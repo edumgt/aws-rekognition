@@ -184,7 +184,7 @@ aws iam attach-role-policy \
 
 ```bash
 export AWS_REGION=ap-northeast-2
-export S3_BUCKET_NAME=polly-bucket-edumgt
+export S3_BUCKET_NAME=edumgt-20260402-14-test
 export LAMBDA_ROLE_ARN=arn:aws:iam::086015456585:role/rekognition-lambda-role
 
 ./scripts/aws_batch_ops.sh lambda-deploy
@@ -265,7 +265,7 @@ aws lambda get-function-configuration \
 aws lambda update-function-configuration \
   --region ap-northeast-2 \
   --function-name rekognition-face-compare-upload \
-  --environment "Variables={S3_BUCKET_NAME=polly-bucket-edumgt}"
+  --environment "Variables={S3_BUCKET_NAME=edumgt-20260402-14-test}"
 
 aws lambda wait function-updated \
   --region ap-northeast-2 \
