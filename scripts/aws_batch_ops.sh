@@ -13,8 +13,18 @@ LAMBDA_UPLOAD_FUNCTION="${LAMBDA_UPLOAD_FUNCTION:-rekognition-face-upload}"
 LAMBDA_COMPARE_FUNCTION="${LAMBDA_COMPARE_FUNCTION:-rekognition-face-compare}"
 LAMBDA_COMPARE_UPLOAD_FUNCTION="${LAMBDA_COMPARE_UPLOAD_FUNCTION:-rekognition-face-compare-upload}"
 LAMBDA_TEXT_FUNCTION="${LAMBDA_TEXT_FUNCTION:-rekognition-text-detect}"
+LAMBDA_FACE_COLLECTION_FUNCTION="${LAMBDA_FACE_COLLECTION_FUNCTION:-rekognition-face-collection}"
+LAMBDA_CUSTOM_LABELS_FUNCTION="${LAMBDA_CUSTOM_LABELS_FUNCTION:-rekognition-custom-labels}"
 LAMBDA_TIMEOUT="${LAMBDA_TIMEOUT:-30}"
 LAMBDA_MEMORY_SIZE="${LAMBDA_MEMORY_SIZE:-256}"
+
+# Custom Labels 관련 환경 변수입니다.
+CUSTOM_LABELS_PROJECT="${CUSTOM_LABELS_PROJECT:-rekognition-custom-labels-demo}"
+CUSTOM_LABELS_VERSION_NAME="${CUSTOM_LABELS_VERSION_NAME:-v$(date +%Y%m%d%H%M%S)}"
+CUSTOM_LABELS_MANIFEST_S3_URI="${CUSTOM_LABELS_MANIFEST_S3_URI:-s3://${BUCKET_NAME}/custom-labels/manifests/train.manifest}"
+CUSTOM_LABELS_OUTPUT_S3_URI="${CUSTOM_LABELS_OUTPUT_S3_URI:-s3://${BUCKET_NAME}/custom-labels/output/}"
+CUSTOM_LABELS_VERSION_ARN="${CUSTOM_LABELS_VERSION_ARN:-}"
+CUSTOM_LABELS_TEST_IMAGE_PATH="${CUSTOM_LABELS_TEST_IMAGE_PATH:-./server/training/domain/test.jpg}"
 
 mkdir -p "${WORK_DIR}"
 
@@ -39,8 +49,10 @@ Commands:
   report               Save bucket inventory report to ${REPORT_FILE}
   cleanup              Delete objects under training/ (safe cleanup)
   lambda-package       Package Lambda sources into batch-work/*.zip
-  lambda-deploy        Create/update Lambda functions for upload+compare+web handlers
+  lambda-deploy        Create/update Lambda functions for upload+compare+web+fine-tuning handlers
   lambda-invoke        Invoke upload and compare Lambda sequentially
+  custom-labels-train  Start Custom Labels model training (requires CUSTOM_LABELS_PROJECT, CUSTOM_LABELS_MANIFEST_S3_URI)
+  custom-labels-infer  Run DetectCustomLabels inference (requires CUSTOM_LABELS_VERSION_ARN, CUSTOM_LABELS_TEST_IMAGE_PATH)
   lab-all              Run init -> upload -> lambda-deploy -> lambda-invoke -> report
 
 Environment variables:
@@ -54,6 +66,14 @@ Environment variables:
   LAMBDA_COMPARE_FUNCTION  Compare Lambda function name
   LAMBDA_COMPARE_UPLOAD_FUNCTION  Upload-file compare Lambda function name
   LAMBDA_TEXT_FUNCTION  DetectText Lambda function name
+  LAMBDA_FACE_COLLECTION_FUNCTION  Face Collection Lambda function name
+  LAMBDA_CUSTOM_LABELS_FUNCTION    Custom Labels Lambda function name
+  CUSTOM_LABELS_PROJECT            Custom Labels project name
+  CUSTOM_LABELS_VERSION_NAME       Model version name (default: timestamp)
+  CUSTOM_LABELS_MANIFEST_S3_URI    S3 URI of the training manifest file
+  CUSTOM_LABELS_OUTPUT_S3_URI      S3 URI prefix for training output
+  CUSTOM_LABELS_VERSION_ARN        Deployed model ARN (required for custom-labels-infer)
+  CUSTOM_LABELS_TEST_IMAGE_PATH    Local image path for inference test
 USAGE
 }
 
@@ -154,6 +174,8 @@ package_lambda() {
   local compare_zip="${WORK_DIR}/lambda-compare.zip"
   local compare_upload_zip="${WORK_DIR}/lambda-compare-upload.zip"
   local text_zip="${WORK_DIR}/lambda-text.zip"
+  local face_collection_zip="${WORK_DIR}/lambda-face-collection.zip"
+  local custom_labels_zip="${WORK_DIR}/lambda-custom-labels.zip"
 
   log "Packaging Lambda source files"
   (
@@ -162,9 +184,11 @@ package_lambda() {
     zip -qr "../${compare_zip}" lambda/compareFacesHandler.js src node_modules package.json package-lock.json
     zip -qr "../${compare_upload_zip}" lambda/compareUploadedFacesHandler.js src node_modules package.json package-lock.json
     zip -qr "../${text_zip}" lambda/detectTextHandler.js src node_modules package.json package-lock.json
+    zip -qr "../${face_collection_zip}" lambda/faceCollectionHandler.js src node_modules package.json package-lock.json
+    zip -qr "../${custom_labels_zip}" lambda/customLabelsHandler.js src node_modules package.json package-lock.json
   )
 
-  log "Packaged: ${upload_zip}, ${compare_zip}, ${compare_upload_zip}, ${text_zip}"
+  log "Packaged: ${upload_zip}, ${compare_zip}, ${compare_upload_zip}, ${text_zip}, ${face_collection_zip}, ${custom_labels_zip}"
 }
 
 upsert_lambda() {
@@ -211,8 +235,88 @@ deploy_lambda() {
   upsert_lambda "${LAMBDA_COMPARE_FUNCTION}" "lambda/compareFacesHandler.handler" "${WORK_DIR}/lambda-compare.zip"
   upsert_lambda "${LAMBDA_COMPARE_UPLOAD_FUNCTION}" "lambda/compareUploadedFacesHandler.handler" "${WORK_DIR}/lambda-compare-upload.zip"
   upsert_lambda "${LAMBDA_TEXT_FUNCTION}" "lambda/detectTextHandler.handler" "${WORK_DIR}/lambda-text.zip"
+  upsert_lambda "${LAMBDA_FACE_COLLECTION_FUNCTION}" "lambda/faceCollectionHandler.handler" "${WORK_DIR}/lambda-face-collection.zip"
+  upsert_lambda "${LAMBDA_CUSTOM_LABELS_FUNCTION}" "lambda/customLabelsHandler.handler" "${WORK_DIR}/lambda-custom-labels.zip"
 
   log "Lambda deploy completed"
+}
+
+# Custom Labels 모델 학습을 시작합니다.
+# 필수 환경 변수: CUSTOM_LABELS_PROJECT, CUSTOM_LABELS_MANIFEST_S3_URI, CUSTOM_LABELS_OUTPUT_S3_URI
+custom_labels_train() {
+  if [[ -z "${LAMBDA_ROLE_ARN}" ]]; then
+    echo "LAMBDA_ROLE_ARN is required for custom-labels-train (Lambda must exist)." >&2
+    exit 1
+  fi
+
+  log "Starting Custom Labels training: project=${CUSTOM_LABELS_PROJECT}, version=${CUSTOM_LABELS_VERSION_NAME}"
+
+  # 1. 프로젝트 생성을 시도합니다. 이미 존재하면 무시합니다.
+  local create_payload
+  create_payload=$(printf '{"action":"create-project","projectName":"%s"}' "${CUSTOM_LABELS_PROJECT}")
+  run_aws lambda invoke \
+    --function-name "${LAMBDA_CUSTOM_LABELS_FUNCTION}" \
+    --cli-binary-format raw-in-base64-out \
+    --payload "${create_payload}" \
+    "${WORK_DIR}/custom-labels-create-project.json" >/dev/null || true
+  log "Project creation result: $(cat "${WORK_DIR}/custom-labels-create-project.json")"
+
+  # 2. 학습을 시작합니다. projectArn은 create-project 응답에서 추출합니다.
+  local project_arn
+  project_arn=$(python3 -c "import json,sys; d=json.load(open('${WORK_DIR}/custom-labels-create-project.json')); b=json.loads(d.get('body','{}') if isinstance(d,dict) else '{}'); print(b.get('projectArn',''))" 2>/dev/null || true)
+
+  if [[ -z "${project_arn}" ]]; then
+    log "Could not extract projectArn. Check ${WORK_DIR}/custom-labels-create-project.json"
+    log "Attempting to use describe-versions to find existing project ARN..."
+    echo '{"action":"describe-versions","projectArn":""}' > /dev/null
+    echo "Please set CUSTOM_LABELS_VERSION_ARN manually after training starts." >&2
+    exit 1
+  fi
+
+  local train_payload
+  train_payload=$(printf '{"action":"train","projectArn":"%s","versionName":"%s","outputS3Uri":"%s"}' \
+    "${project_arn}" "${CUSTOM_LABELS_VERSION_NAME}" "${CUSTOM_LABELS_OUTPUT_S3_URI}")
+
+  log "Invoking Lambda to start training..."
+  run_aws lambda invoke \
+    --function-name "${LAMBDA_CUSTOM_LABELS_FUNCTION}" \
+    --cli-binary-format raw-in-base64-out \
+    --payload "${train_payload}" \
+    "${WORK_DIR}/custom-labels-train-result.json" >/dev/null
+  log "Training started. Result: $(cat "${WORK_DIR}/custom-labels-train-result.json")"
+  log "Training takes minutes to hours. Poll status with:"
+  log "  action=describe-versions, projectArn=${project_arn}"
+}
+
+# Custom Labels 추론을 실행합니다.
+# 필수 환경 변수: CUSTOM_LABELS_VERSION_ARN, CUSTOM_LABELS_TEST_IMAGE_PATH
+custom_labels_infer() {
+  if [[ -z "${CUSTOM_LABELS_VERSION_ARN}" ]]; then
+    echo "CUSTOM_LABELS_VERSION_ARN is required for custom-labels-infer." >&2
+    exit 1
+  fi
+  if [[ ! -f "${CUSTOM_LABELS_TEST_IMAGE_PATH}" ]]; then
+    echo "Test image not found: ${CUSTOM_LABELS_TEST_IMAGE_PATH}" >&2
+    exit 1
+  fi
+
+  log "Encoding test image: ${CUSTOM_LABELS_TEST_IMAGE_PATH}"
+  local image_base64
+  image_base64=$(base64 -w 0 "${CUSTOM_LABELS_TEST_IMAGE_PATH}")
+
+  local detect_payload
+  detect_payload=$(printf '{"action":"detect","projectVersionArn":"%s","imageBase64":"%s","minConfidence":50}' \
+    "${CUSTOM_LABELS_VERSION_ARN}" "${image_base64}")
+
+  log "Invoking Lambda for inference..."
+  run_aws lambda invoke \
+    --function-name "${LAMBDA_CUSTOM_LABELS_FUNCTION}" \
+    --cli-binary-format raw-in-base64-out \
+    --payload "${detect_payload}" \
+    "${WORK_DIR}/custom-labels-result.json" >/dev/null
+
+  log "Inference result saved to ${WORK_DIR}/custom-labels-result.json"
+  cat "${WORK_DIR}/custom-labels-result.json"
 }
 
 invoke_lambda() {
@@ -251,6 +355,8 @@ main() {
     lambda-package) package_lambda ;;
     lambda-deploy) deploy_lambda ;;
     lambda-invoke) invoke_lambda ;;
+    custom-labels-train) custom_labels_train ;;
+    custom-labels-infer) custom_labels_infer ;;
     lab-all) run_lab_all ;;
     *) usage; exit 1 ;;
   esac
