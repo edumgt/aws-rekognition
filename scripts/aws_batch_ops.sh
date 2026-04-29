@@ -296,8 +296,16 @@ custom_labels_infer() {
     exit 1
   fi
   if [[ ! -f "${CUSTOM_LABELS_TEST_IMAGE_PATH}" ]]; then
-    echo "Test image not found: ${CUSTOM_LABELS_TEST_IMAGE_PATH}" >&2
-    exit 1
+    # 지정 경로에 이미지가 없으면 server/ 디렉터리의 첫 번째 PNG를 대신 사용합니다.
+    local fallback
+    fallback=$(find "${UPLOAD_DIR}" -maxdepth 1 -name "*.png" | head -n 1)
+    if [[ -z "${fallback}" ]]; then
+      echo "Test image not found: ${CUSTOM_LABELS_TEST_IMAGE_PATH}" >&2
+      echo "Set CUSTOM_LABELS_TEST_IMAGE_PATH to an existing image file." >&2
+      exit 1
+    fi
+    log "Test image not found at '${CUSTOM_LABELS_TEST_IMAGE_PATH}', using fallback: ${fallback}"
+    CUSTOM_LABELS_TEST_IMAGE_PATH="${fallback}"
   fi
 
   log "Encoding test image: ${CUSTOM_LABELS_TEST_IMAGE_PATH}"
