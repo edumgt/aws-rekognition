@@ -18,7 +18,8 @@
 - `Readme3.md`: S3 퍼블릭 접근/라이프사이클 운영 가이드
 - `Readme4.md`: IAM Principal/AssumeRole 개념 정리
 - `Lambda.md`: Lambda 목록 조회/백업 운영 가이드
-- `DOC/README.md`: 10개 챕터 커리큘럼 인덱스
+- `DOC/README.md`: 11개 챕터 커리큘럼 인덱스
+- `DOC/Chapter11/`: 도메인 Fine-tuning — Custom Labels & Face Collection
 
 ---
 ## 1) 리팩토링 핵심 구조
@@ -32,8 +33,21 @@
 │  │  ├─ fileUtils.js          # 이미지 파일 로딩 유틸
 │  │  └─ faceWorkflow.js       # 얼굴 업로드 + 얼굴 비교 비즈니스 로직
 │  ├─ lambda/
-│  │  ├─ uploadFacesHandler.js # Lambda: face1~6 S3 업로드
-│  │  └─ compareFacesHandler.js# Lambda: face1~6 유사도 비교
+│  │  ├─ uploadFacesHandler.js        # Lambda: face1~6 S3 업로드
+│  │  ├─ compareFacesHandler.js       # Lambda: face1~6 유사도 비교
+│  │  ├─ compareUploadedFacesHandler.js # Lambda: 웹 업로드 이미지 비교
+│  │  ├─ detectTextHandler.js         # Lambda: 텍스트 감지
+│  │  ├─ faceCollectionHandler.js     # Lambda: Face Collection CRUD + 검색
+│  │  └─ customLabelsHandler.js       # Lambda: Custom Labels Fine-tuning
+│  ├─ local/
+│  │  ├─ compareFacesLocal.js         # 로컬 실행용
+│  │  ├─ compareUploadedFacesLocal.js # 로컬 실행용
+│  │  ├─ detectTextLocal.js           # 로컬 실행용
+│  │  ├─ uploadFacesLocal.js          # 로컬 실행용
+│  │  ├─ faceCollectionLocal.js       # Face Collection 로컬 실행용
+│  │  └─ customLabelsLocal.js         # Custom Labels 로컬 실행용
+│  ├─ training/
+│  │  └─ domain/                      # 도메인 학습 이미지 + manifest 예시
 │  ├─ upload.js                # 로컬 실행용 업로드 엔트리
 │  ├─ compare.js               # 로컬 실행용 비교 엔트리
 │  ├─ extract.js               # 텍스트 감지 샘플

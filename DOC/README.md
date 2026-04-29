@@ -19,6 +19,7 @@
 8. Chapter08 - 운영 자동화와 배치 스크립트
 9. Chapter09 - 모니터링·비용·보안 점검
 10. Chapter10 - 최종 프로젝트와 확장 로드맵
+11. Chapter11 - 도메인 Fine-tuning (Custom Labels & Face Collection)
 
 ---
 
@@ -28,6 +29,7 @@
 - **Chapter03~04**: CLI와 S3 실무 명령을 통해 데이터 저장소 운영 능력을 확보합니다.
 - **Chapter05~07**: Node.js 코드에서 Rekognition API를 호출하며 기능을 실제로 구현합니다.
 - **Chapter08~10**: 배치 자동화, 운영 관측성, 확장 아키텍처까지 포함해 실무형 프로젝트로 연결합니다.
+- **Chapter11**: Custom Labels Fine-tuning과 Face Collection으로 도메인 특화 AI를 구축합니다.
 
 ---
 
