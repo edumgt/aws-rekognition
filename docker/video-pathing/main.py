@@ -22,6 +22,19 @@ app = FastAPI(
 )
 
 
+def _resolve_path_under_root(raw_path: str, *, root_env_name: str, default_root: str) -> Path:
+    root = Path(os.environ.get(root_env_name, default_root)).expanduser().resolve()
+    candidate = Path(raw_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = candidate.resolve()
+
+    if resolved != root and root not in resolved.parents:
+        raise HTTPException(status_code=400, detail=f'Path must stay under {root}')
+
+    return resolved
+
+
 @app.get('/health')
 def health() -> dict:
     return {'status': 'ok'}
@@ -29,13 +42,21 @@ def health() -> dict:
 
 @app.post('/track/file')
 def track_file(payload: TrackFileRequest) -> dict:
-    source_path = Path(payload.source_video_path).expanduser().resolve()
+    source_path = _resolve_path_under_root(
+        payload.source_video_path,
+        root_env_name='VIDEO_ALLOWED_SOURCE_ROOT',
+        default_root='/data',
+    )
     if not source_path.is_file():
         raise HTTPException(status_code=400, detail=f'Video file not found: {source_path}')
 
     output_path = None
     if payload.output_video_path:
-        output_path = Path(payload.output_video_path).expanduser().resolve()
+        output_path = _resolve_path_under_root(
+            payload.output_video_path,
+            root_env_name='VIDEO_ALLOWED_OUTPUT_ROOT',
+            default_root='/tmp/video-outputs',
+        )
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
     return track_video(source_path=source_path, output_video_path=output_path)

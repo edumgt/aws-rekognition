@@ -36,6 +36,8 @@ curl -X POST http://localhost:8080/track/file \
   }'
 ```
 
+`/track/file` 엔드포인트는 기본적으로 `/data` 아래 입력 파일과 `/tmp/video-outputs` 아래 출력 경로만 허용합니다.
+
 ### 2. 파일 업로드 기반 실행
 
 ```bash
@@ -62,3 +64,5 @@ curl -X POST http://localhost:8080/track/upload \
 - `FRAME_STRIDE`: n 프레임마다 한 번만 추론
 - `TRACK_BUFFER_SECONDS`: 추적 손실 허용 시간
 - `TRACK_MATCHING_THRESHOLD`: ByteTrack 매칭 임계값
+- `VIDEO_ALLOWED_SOURCE_ROOT`: `/track/file` 입력 허용 루트(기본 `/data`)
+- `VIDEO_ALLOWED_OUTPUT_ROOT`: `/track/file` 출력 허용 루트(기본 `/tmp/video-outputs`)
