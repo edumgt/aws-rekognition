@@ -210,7 +210,7 @@ def track_video(source_path: Path, output_video_path: Optional[Path] = None) -> 
             if len(tracker_ids) != detection_count or len(confidences) != detection_count:
                 raise ValueError(
                     'Tracker output is inconsistent: '
-                    f'expected {detection_count} items, '
+                    f'expected {detection_count} xyxy items, '
                     f'got {len(tracker_ids)} tracker_ids and {len(confidences)} confidences.'
                 )
 

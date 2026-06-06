@@ -27,8 +27,6 @@ def _resolve_relative_path(raw_path: str, *, root_env_name: str, default_root: s
     relative_path = PurePath(raw_path)
     if relative_path.is_absolute():
         raise HTTPException(status_code=400, detail='Absolute paths are not allowed.')
-    if any(part in ('.', '..') for part in relative_path.parts):
-        raise HTTPException(status_code=400, detail="Path must be a relative file path without '.' or '..' traversal segments.")
     if not relative_path.parts:
         raise HTTPException(status_code=400, detail='Path is required.')
 
