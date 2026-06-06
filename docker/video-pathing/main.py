@@ -1,7 +1,7 @@
 import os
 import shutil
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -11,8 +11,8 @@ from tracking_service import track_video
 
 
 class TrackFileRequest(BaseModel):
-    source_video_path: str = Field(..., description='Absolute path to the input video inside the container')
-    output_video_path: Optional[str] = Field(default=None, description='Optional absolute path for the annotated output video')
+    source_video_path: str = Field(..., description='Relative path to the input video under the allowed source root')
+    output_video_path: Optional[str] = Field(default=None, description='Optional relative path for the annotated output video under the allowed output root')
 
 
 app = FastAPI(
@@ -22,14 +22,18 @@ app = FastAPI(
 )
 
 
-def _resolve_path_under_root(raw_path: str, *, root_env_name: str, default_root: str) -> Path:
+def _resolve_relative_path(raw_path: str, *, root_env_name: str, default_root: str) -> Path:
     root = Path(os.environ.get(root_env_name, default_root)).expanduser().resolve()
-    candidate = Path(raw_path).expanduser()
-    if not candidate.is_absolute():
-        candidate = root / candidate
-    resolved = candidate.resolve()
+    relative_path = PurePath(raw_path)
+    if relative_path.is_absolute():
+        raise HTTPException(status_code=400, detail='Absolute paths are not allowed.')
+    if any(part in ('', '.', '..') for part in relative_path.parts):
+        raise HTTPException(status_code=400, detail='Path must be a relative file path without traversal.')
+    if not relative_path.parts:
+        raise HTTPException(status_code=400, detail='Path is required.')
 
-    if resolved != root and root not in resolved.parents:
+    resolved = (root.joinpath(*relative_path.parts)).resolve()
+    if root not in resolved.parents:
         raise HTTPException(status_code=400, detail=f'Path must stay under {root}')
 
     return resolved
@@ -42,7 +46,7 @@ def health() -> dict:
 
 @app.post('/track/file')
 def track_file(payload: TrackFileRequest) -> dict:
-    source_path = _resolve_path_under_root(
+    source_path = _resolve_relative_path(
         payload.source_video_path,
         root_env_name='VIDEO_ALLOWED_SOURCE_ROOT',
         default_root='/data',
@@ -52,7 +56,7 @@ def track_file(payload: TrackFileRequest) -> dict:
 
     output_path = None
     if payload.output_video_path:
-        output_path = _resolve_path_under_root(
+        output_path = _resolve_relative_path(
             payload.output_video_path,
             root_env_name='VIDEO_ALLOWED_OUTPUT_ROOT',
             default_root='/tmp/video-outputs',

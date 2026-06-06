@@ -31,12 +31,12 @@ docker compose up --build
 curl -X POST http://localhost:8080/track/file \
   -H 'Content-Type: application/json' \
   -d '{
-    "source_video_path": "/data/people.mp4",
-    "output_video_path": "/tmp/video-outputs/people-tracked.mp4"
+    "source_video_path": "people.mp4",
+    "output_video_path": "people-tracked.mp4"
   }'
 ```
 
-`/track/file` 엔드포인트는 기본적으로 `/data` 아래 입력 파일과 `/tmp/video-outputs` 아래 출력 경로만 허용합니다.
+`/track/file` 엔드포인트는 기본적으로 `/data` 아래 입력 파일과 `/tmp/video-outputs` 아래 출력 경로만 허용하며, 상대 경로만 받을 수 있습니다.
 
 ### 2. 파일 업로드 기반 실행
 
