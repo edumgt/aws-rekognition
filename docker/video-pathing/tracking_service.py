@@ -185,22 +185,37 @@ def track_video(source_path: Path, output_video_path: Optional[Path] = None) -> 
             processed_frames += 1
 
             labels = []
-            tracker_ids = detections.tracker_id if detections.tracker_id is not None else []
-            confidences = detections.confidence if detections.confidence is not None else []
-            for xyxy, confidence, tracker_id in zip(detections.xyxy, confidences, tracker_ids):
+            detection_count = len(detections.xyxy)
+            tracker_ids = (
+                detections.tracker_id
+                if detections.tracker_id is not None
+                else np.full(detection_count, -1, dtype=np.int32)
+            )
+            confidences = (
+                detections.confidence
+                if detections.confidence is not None
+                else np.zeros(detection_count, dtype=np.float32)
+            )
+            if len(tracker_ids) != detection_count or len(confidences) != detection_count:
+                raise ValueError('Tracker output is inconsistent with detection output.')
+
+            for index, xyxy in enumerate(detections.xyxy):
+                confidence = float(confidences[index])
+                tracker_id = int(tracker_ids[index])
+                if tracker_id < 0:
+                    continue
                 x1, y1, x2, y2 = xyxy.tolist()
                 center_x = round((x1 + x2) / 2, 2)
                 foot_y = round(y2, 2)
-                track_id_int = int(tracker_id)
-                tracks[track_id_int].append(
+                tracks[tracker_id].append(
                     {
                         'frame': frame_index,
                         'x': center_x,
                         'y': foot_y,
-                        'confidence': round(float(confidence), 4),
+                        'confidence': round(confidence, 4),
                     }
                 )
-                labels.append(f'#{track_id_int} {float(confidence):.2f}')
+                labels.append(f'#{tracker_id} {confidence:.2f}')
 
             annotated = box_annotator.annotate(scene=frame.copy(), detections=detections)
             annotated = label_annotator.annotate(scene=annotated, detections=detections, labels=labels)
