@@ -1,0 +1,21 @@
+services:
+  video-pathing:
+    build:
+      context: ../..
+      dockerfile: docker/video-pathing/Dockerfile
+    container_name: yolo9-bytetrack-video-pathing
+    environment:
+      YOLO_DEVICE: ${YOLO_DEVICE:-cpu}
+      YOLOV9_WEIGHTS: ${YOLOV9_WEIGHTS:-/models/yolov9-c.pt}
+      YOLOV9_WEIGHTS_URL: ${YOLOV9_WEIGHTS_URL:-}
+      YOLO_CONFIDENCE_THRESHOLD: ${YOLO_CONFIDENCE_THRESHOLD:-0.25}
+      YOLO_IOU_THRESHOLD: ${YOLO_IOU_THRESHOLD:-0.45}
+      FRAME_STRIDE: ${FRAME_STRIDE:-1}
+      TRACK_BUFFER_SECONDS: ${TRACK_BUFFER_SECONDS:-2}
+      TRACK_MATCHING_THRESHOLD: ${TRACK_MATCHING_THRESHOLD:-0.8}
+    ports:
+      - '8080:8080'
+    volumes:
+      - ../../models:/models
+      - ../../sample-videos:/data
+      - ../../outputs:/tmp/video-outputs

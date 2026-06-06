@@ -20,6 +20,7 @@
 - `Lambda.md`: Lambda 목록 조회/백업 운영 가이드
 - `DOC/README.md`: 11개 챕터 커리큘럼 인덱스
 - `DOC/Chapter11/`: 도메인 Fine-tuning — Custom Labels & Face Collection
+- `docker/video-pathing/README.md`: YOLOv9 + ByteTrack 기반 Video People Pathing 대체 서비스
 
 ---
 ## 1) 리팩토링 핵심 구조
@@ -146,6 +147,37 @@ aws lambda get-function --region ap-northeast-2 --function-name rekognition-face
 
 - **이미지 유사성 비교**: source/target 이미지를 업로드해 CompareFaces Lambda 호출
 - **텍스트 추출**: 단일 이미지를 업로드해 DetectText Lambda 호출
+
+---
+
+## 4-2) YOLOv9 + ByteTrack Video People Pathing 대체 서비스
+
+Amazon Rekognition의 **Video People Pathing** 대체 용도로 `docker/video-pathing` 모듈을 추가했습니다.
+
+- **YOLOv9**: 사람 객체 검출
+- **ByteTrack**: 동일 인물의 프레임 간 이동 경로 추적
+- **FastAPI + Docker**: 온프레미스/사내 GPU 서버 또는 로컬 Docker 환경에 배포 가능
+
+빠른 시작:
+
+```bash
+cd docker/video-pathing
+docker compose up --build
+```
+
+기본 호출 예시:
+
+```bash
+curl -X POST http://localhost:8080/track/upload \
+  -F 'file=@/absolute/path/to/people.mp4'
+```
+
+주요 결과물:
+
+- 추적 박스 + 이동 경로가 포함된 annotated mp4
+- 트랙별 좌표 시퀀스가 저장된 JSON
+
+세부 설정과 API 예시는 `docker/video-pathing/README.md`를 참고하세요.
 
 ## 5) Lambda 배포 자동화 (핵심)
 

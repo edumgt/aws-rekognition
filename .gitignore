@@ -6,3 +6,6 @@
 /server/node_modules/
 /lambda-backup*
 /DOC/*.mp4
+/models/
+/outputs/
+/sample-videos/
