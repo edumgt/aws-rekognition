@@ -16,12 +16,23 @@ MODEL_CACHE: Dict[str, Any] = {}
 
 
 def _env_float(name: str, default: float) -> float:
-    return float(os.environ.get(name, default))
-
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError as error:
+        raise ValueError(f'Invalid float value for {name}: {value}') from error
 
 
 def _env_int(name: str, default: int) -> int:
-    return int(os.environ.get(name, default))
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError as error:
+        raise ValueError(f'Invalid integer value for {name}: {value}') from error
 
 
 
@@ -197,7 +208,11 @@ def track_video(source_path: Path, output_video_path: Optional[Path] = None) -> 
                 else np.zeros(detection_count, dtype=np.float32)
             )
             if len(tracker_ids) != detection_count or len(confidences) != detection_count:
-                raise ValueError('Tracker output is inconsistent with detection output.')
+                raise ValueError(
+                    'Tracker output is inconsistent: '
+                    f'expected {detection_count} items, '
+                    f'got {len(tracker_ids)} tracker_ids and {len(confidences)} confidences.'
+                )
 
             for index, xyxy in enumerate(detections.xyxy):
                 confidence = float(confidences[index])
