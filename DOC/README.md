@@ -1,7 +1,7 @@
 # DOC 커리큘럼 가이드
 
 이 폴더는 AWS Rekognition 학습을 단계적으로 따라갈 수 있도록 구성된 커리큘럼 문서 모음입니다.
-아래 10개 챕터를 순서대로 학습하면, 기초 보안부터 자동화 운영까지 한 흐름으로 이해할 수 있습니다.
+아래 11개 챕터를 순서대로 학습하면, 기초 보안부터 도메인 Fine-tuning까지 한 흐름으로 이해할 수 있습니다.
 
 > 실습 버킷 기본값: `polly-bucket-edumgt`
 
@@ -19,6 +19,7 @@
 8. Chapter08 - 운영 자동화와 배치 스크립트
 9. Chapter09 - 모니터링·비용·보안 점검
 10. Chapter10 - 최종 프로젝트와 확장 로드맵
+11. Chapter11 - 도메인 Fine-tuning (Rekognition Custom Labels)
 
 ---
 
@@ -28,6 +29,7 @@
 - **Chapter03~04**: CLI와 S3 실무 명령을 통해 데이터 저장소 운영 능력을 확보합니다.
 - **Chapter05~07**: Node.js 코드에서 Rekognition API를 호출하며 기능을 실제로 구현합니다.
 - **Chapter08~10**: 배치 자동화, 운영 관측성, 확장 아키텍처까지 포함해 실무형 프로젝트로 연결합니다.
+- **Chapter11**: Custom Labels로 도메인 데이터를 Fine-tuning해 특화 모델을 만들고 추론합니다.
 
 ---
 
@@ -53,5 +55,6 @@
 
 - [ ] S3 버킷 생성/업로드/정책 설정을 CLI로 수행 가능
 - [ ] Rekognition CompareFaces/DetectText를 코드와 Lambda에서 각각 실행 가능
+- [ ] Custom Labels로 도메인 특화 모델을 학습하고 추론 가능
 - [ ] 배치 스크립트로 배포 및 검증 자동화 가능
 - [ ] 권한 오류 발생 시 원인(IAM/리전/리소스)을 독립적으로 진단 가능

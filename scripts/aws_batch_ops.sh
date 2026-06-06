@@ -13,6 +13,13 @@ LAMBDA_UPLOAD_FUNCTION="${LAMBDA_UPLOAD_FUNCTION:-rekognition-face-upload}"
 LAMBDA_COMPARE_FUNCTION="${LAMBDA_COMPARE_FUNCTION:-rekognition-face-compare}"
 LAMBDA_COMPARE_UPLOAD_FUNCTION="${LAMBDA_COMPARE_UPLOAD_FUNCTION:-rekognition-face-compare-upload}"
 LAMBDA_TEXT_FUNCTION="${LAMBDA_TEXT_FUNCTION:-rekognition-text-detect}"
+LAMBDA_CUSTOM_TRAIN_FUNCTION="${LAMBDA_CUSTOM_TRAIN_FUNCTION:-rekognition-custom-labels-train}"
+LAMBDA_CUSTOM_PREDICT_FUNCTION="${LAMBDA_CUSTOM_PREDICT_FUNCTION:-rekognition-custom-labels-predict}"
+CUSTOM_LABELS_PROJECT="${CUSTOM_LABELS_PROJECT:-rekognition-custom-labels-demo}"
+CUSTOM_LABELS_MANIFEST_KEY="${CUSTOM_LABELS_MANIFEST_KEY:-custom-labels/manifest.jsonl}"
+CUSTOM_LABELS_OUTPUT_PREFIX="${CUSTOM_LABELS_OUTPUT_PREFIX:-custom-labels/output/}"
+CUSTOM_LABELS_VERSION_ARN="${CUSTOM_LABELS_VERSION_ARN:-}"
+CUSTOM_LABELS_IMAGE_KEY="${CUSTOM_LABELS_IMAGE_KEY:-training/face1.png}"
 LAMBDA_TIMEOUT="${LAMBDA_TIMEOUT:-30}"
 LAMBDA_MEMORY_SIZE="${LAMBDA_MEMORY_SIZE:-256}"
 
@@ -41,6 +48,8 @@ Commands:
   lambda-package       Package Lambda sources into batch-work/*.zip
   lambda-deploy        Create/update Lambda functions for upload+compare+web handlers
   lambda-invoke        Invoke upload and compare Lambda sequentially
+  custom-labels-train  Package+deploy Custom Labels train Lambda and start model training
+  custom-labels-predict  Invoke Custom Labels predict Lambda (requires CUSTOM_LABELS_VERSION_ARN)
   lab-all              Run init -> upload -> lambda-deploy -> lambda-invoke -> report
 
 Environment variables:
@@ -54,6 +63,13 @@ Environment variables:
   LAMBDA_COMPARE_FUNCTION  Compare Lambda function name
   LAMBDA_COMPARE_UPLOAD_FUNCTION  Upload-file compare Lambda function name
   LAMBDA_TEXT_FUNCTION  DetectText Lambda function name
+  LAMBDA_CUSTOM_TRAIN_FUNCTION   Custom Labels training Lambda function name
+  LAMBDA_CUSTOM_PREDICT_FUNCTION Custom Labels predict Lambda function name
+  CUSTOM_LABELS_PROJECT        Custom Labels project name
+  CUSTOM_LABELS_MANIFEST_KEY   S3 key for the training manifest file
+  CUSTOM_LABELS_OUTPUT_PREFIX  S3 prefix for training output
+  CUSTOM_LABELS_VERSION_ARN    Project version ARN (required for custom-labels-predict)
+  CUSTOM_LABELS_IMAGE_KEY      S3 key of the image to analyse (custom-labels-predict)
 USAGE
 }
 
@@ -154,6 +170,8 @@ package_lambda() {
   local compare_zip="${WORK_DIR}/lambda-compare.zip"
   local compare_upload_zip="${WORK_DIR}/lambda-compare-upload.zip"
   local text_zip="${WORK_DIR}/lambda-text.zip"
+  local custom_train_zip="${WORK_DIR}/lambda-custom-train.zip"
+  local custom_predict_zip="${WORK_DIR}/lambda-custom-predict.zip"
 
   log "Packaging Lambda source files"
   (
@@ -162,9 +180,11 @@ package_lambda() {
     zip -qr "../${compare_zip}" lambda/compareFacesHandler.js src node_modules package.json package-lock.json
     zip -qr "../${compare_upload_zip}" lambda/compareUploadedFacesHandler.js src node_modules package.json package-lock.json
     zip -qr "../${text_zip}" lambda/detectTextHandler.js src node_modules package.json package-lock.json
+    zip -qr "../${custom_train_zip}" lambda/trainCustomModelHandler.js src node_modules package.json package-lock.json
+    zip -qr "../${custom_predict_zip}" lambda/detectCustomLabelsHandler.js src node_modules package.json package-lock.json
   )
 
-  log "Packaged: ${upload_zip}, ${compare_zip}, ${compare_upload_zip}, ${text_zip}"
+  log "Packaged: ${upload_zip}, ${compare_zip}, ${compare_upload_zip}, ${text_zip}, ${custom_train_zip}, ${custom_predict_zip}"
 }
 
 upsert_lambda() {
@@ -239,6 +259,133 @@ run_lab_all() {
   create_report
 }
 
+# ── Custom Labels 학습 ────────────────────────────────────────────────────────
+# 1) 매니페스트 파일을 S3에 업로드합니다.
+# 2) Custom Labels 학습 Lambda를 패키징/배포합니다.
+# 3) 학습 Lambda를 호출해 프로젝트 생성 → 데이터셋 등록 → 학습 시작합니다.
+#    (학습 완료에는 30분~수 시간이 소요됩니다)
+custom_labels_train() {
+  local manifest_src="server/training/custom-labels-manifest.jsonl"
+  local train_zip="${WORK_DIR}/lambda-custom-train.zip"
+
+  # 매니페스트 파일을 S3에 업로드합니다.
+  if [[ -f "${manifest_src}" ]]; then
+    log "Uploading Custom Labels manifest to s3://${BUCKET_NAME}/${CUSTOM_LABELS_MANIFEST_KEY}"
+    run_aws s3 cp "${manifest_src}" "s3://${BUCKET_NAME}/${CUSTOM_LABELS_MANIFEST_KEY}"
+  else
+    log "Warning: ${manifest_src} not found — skipping manifest upload"
+  fi
+
+  # Lambda 패키징 후 배포합니다.
+  log "Packaging Custom Labels train Lambda"
+  (
+    cd server
+    zip -qr "../${train_zip}" lambda/trainCustomModelHandler.js src node_modules package.json package-lock.json
+  )
+
+  local env_vars="Variables={S3_BUCKET_NAME=${BUCKET_NAME},CUSTOM_LABELS_PROJECT=${CUSTOM_LABELS_PROJECT},CUSTOM_LABELS_MANIFEST_KEY=${CUSTOM_LABELS_MANIFEST_KEY},CUSTOM_LABELS_OUTPUT_PREFIX=${CUSTOM_LABELS_OUTPUT_PREFIX}}"
+  if run_aws lambda get-function --function-name "${LAMBDA_CUSTOM_TRAIN_FUNCTION}" >/dev/null 2>&1; then
+    log "Updating Custom Labels train Lambda: ${LAMBDA_CUSTOM_TRAIN_FUNCTION}"
+    run_aws lambda update-function-code \
+      --function-name "${LAMBDA_CUSTOM_TRAIN_FUNCTION}" \
+      --zip-file "fileb://${train_zip}" >/dev/null
+    run_aws lambda update-function-configuration \
+      --function-name "${LAMBDA_CUSTOM_TRAIN_FUNCTION}" \
+      --handler "lambda/trainCustomModelHandler.handler" \
+      --runtime "${LAMBDA_RUNTIME}" \
+      --timeout 60 \
+      --memory-size 256 \
+      --environment "${env_vars}" >/dev/null
+  else
+    if [[ -z "${LAMBDA_ROLE_ARN}" ]]; then
+      echo "LAMBDA_ROLE_ARN is required to create a new Lambda function." >&2
+      exit 1
+    fi
+    log "Creating Custom Labels train Lambda: ${LAMBDA_CUSTOM_TRAIN_FUNCTION}"
+    run_aws lambda create-function \
+      --function-name "${LAMBDA_CUSTOM_TRAIN_FUNCTION}" \
+      --runtime "${LAMBDA_RUNTIME}" \
+      --role "${LAMBDA_ROLE_ARN}" \
+      --handler "lambda/trainCustomModelHandler.handler" \
+      --timeout 60 \
+      --memory-size 256 \
+      --zip-file "fileb://${train_zip}" \
+      --environment "${env_vars}" >/dev/null
+  fi
+
+  # 학습 Lambda를 호출합니다.
+  log "Invoking Custom Labels train Lambda: ${LAMBDA_CUSTOM_TRAIN_FUNCTION}"
+  run_aws lambda invoke \
+    --function-name "${LAMBDA_CUSTOM_TRAIN_FUNCTION}" \
+    --cli-binary-format raw-in-base64-out \
+    --payload '{}' "${WORK_DIR}/custom-train-result.json" >/dev/null
+
+  log "Custom Labels 학습 시작 결과: ${WORK_DIR}/custom-train-result.json"
+  cat "${WORK_DIR}/custom-train-result.json"
+  log "학습 완료까지 30분~수 시간이 소요됩니다. DescribeProjectVersions로 상태를 확인하세요."
+}
+
+# ── Custom Labels 추론 ────────────────────────────────────────────────────────
+# CUSTOM_LABELS_VERSION_ARN 환경 변수에 학습 완료된 모델 ARN을 지정하세요.
+# 1) Custom Labels 추론 Lambda를 패키징/배포합니다.
+# 2) 추론 Lambda를 호출해 결과를 출력합니다.
+custom_labels_predict() {
+  if [[ -z "${CUSTOM_LABELS_VERSION_ARN}" ]]; then
+    echo "Error: CUSTOM_LABELS_VERSION_ARN is required for custom-labels-predict." >&2
+    echo "  export CUSTOM_LABELS_VERSION_ARN=arn:aws:rekognition:...:project/.../version/.../.." >&2
+    exit 1
+  fi
+
+  local predict_zip="${WORK_DIR}/lambda-custom-predict.zip"
+
+  # Lambda 패키징 후 배포합니다.
+  log "Packaging Custom Labels predict Lambda"
+  (
+    cd server
+    zip -qr "../${predict_zip}" lambda/detectCustomLabelsHandler.js src node_modules package.json package-lock.json
+  )
+
+  local env_vars="Variables={S3_BUCKET_NAME=${BUCKET_NAME},CUSTOM_LABELS_VERSION_ARN=${CUSTOM_LABELS_VERSION_ARN},CUSTOM_LABELS_IMAGE_KEY=${CUSTOM_LABELS_IMAGE_KEY}}"
+  if run_aws lambda get-function --function-name "${LAMBDA_CUSTOM_PREDICT_FUNCTION}" >/dev/null 2>&1; then
+    log "Updating Custom Labels predict Lambda: ${LAMBDA_CUSTOM_PREDICT_FUNCTION}"
+    run_aws lambda update-function-code \
+      --function-name "${LAMBDA_CUSTOM_PREDICT_FUNCTION}" \
+      --zip-file "fileb://${predict_zip}" >/dev/null
+    run_aws lambda update-function-configuration \
+      --function-name "${LAMBDA_CUSTOM_PREDICT_FUNCTION}" \
+      --handler "lambda/detectCustomLabelsHandler.handler" \
+      --runtime "${LAMBDA_RUNTIME}" \
+      --timeout 120 \
+      --memory-size 256 \
+      --environment "${env_vars}" >/dev/null
+  else
+    if [[ -z "${LAMBDA_ROLE_ARN}" ]]; then
+      echo "LAMBDA_ROLE_ARN is required to create a new Lambda function." >&2
+      exit 1
+    fi
+    log "Creating Custom Labels predict Lambda: ${LAMBDA_CUSTOM_PREDICT_FUNCTION}"
+    run_aws lambda create-function \
+      --function-name "${LAMBDA_CUSTOM_PREDICT_FUNCTION}" \
+      --runtime "${LAMBDA_RUNTIME}" \
+      --role "${LAMBDA_ROLE_ARN}" \
+      --handler "lambda/detectCustomLabelsHandler.handler" \
+      --timeout 120 \
+      --memory-size 256 \
+      --zip-file "fileb://${predict_zip}" \
+      --environment "${env_vars}" >/dev/null
+  fi
+
+  # 추론 Lambda를 호출합니다.
+  log "Invoking Custom Labels predict Lambda: ${LAMBDA_CUSTOM_PREDICT_FUNCTION}"
+  run_aws lambda invoke \
+    --function-name "${LAMBDA_CUSTOM_PREDICT_FUNCTION}" \
+    --cli-binary-format raw-in-base64-out \
+    --payload '{}' "${WORK_DIR}/custom-predict-result.json" >/dev/null
+
+  log "Custom Labels 추론 결과: ${WORK_DIR}/custom-predict-result.json"
+  cat "${WORK_DIR}/custom-predict-result.json"
+}
+
 main() {
   local cmd="${1:-}"
   case "${cmd}" in
@@ -251,6 +398,8 @@ main() {
     lambda-package) package_lambda ;;
     lambda-deploy) deploy_lambda ;;
     lambda-invoke) invoke_lambda ;;
+    custom-labels-train) custom_labels_train ;;
+    custom-labels-predict) custom_labels_predict ;;
     lab-all) run_lab_all ;;
     *) usage; exit 1 ;;
   esac

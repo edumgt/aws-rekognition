@@ -14,7 +14,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "web": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('web/app.js')\"",
     "lambda:compare:upload:local": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('local/compareUploadedFacesLocal.js')\"",
-    "lambda:text:local": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('local/detectTextLocal.js')\""
+    "lambda:text:local": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('local/detectTextLocal.js')\"",
+    "custom-labels:train": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('local/customLabelsTrainLocal.js')\"",
+    "custom-labels:predict": "node -e \"const path=require('path'); require(path.join(path.dirname(process.env.npm_package_json),'src','runInWsl')).runNodeScript('local/customLabelsPredictLocal.js')\""
   },
   "repository": {
     "type": "git",
