@@ -42,8 +42,8 @@ Custom Labels는 모든 리전에서 사용할 수 없습니다.
 aws rekognition describe-projects --region ap-northeast-2
 ```
 
-> ⚠️ 지원 리전: `us-east-1`, `us-east-2`, `us-west-2`, `eu-west-1`, `ap-northeast-1`, `ap-northeast-2` 등.
-> 최신 목록은 [AWS 공식 문서](https://docs.aws.amazon.com/rekognition/latest/customlabels-dg/what-is.html)를 확인하세요.
+> ⚠️ Custom Labels를 지원하는 리전만 사용 가능합니다(`ap-northeast-2` 포함).
+> 정확한 리전 목록은 [AWS 공식 문서](https://docs.aws.amazon.com/rekognition/latest/customlabels-dg/what-is.html)를 확인하세요.
 
 ---
 
