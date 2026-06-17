@@ -119,7 +119,7 @@ npm run extract
 
 ## 4-1) 웹 프론트엔드 모듈 실행 (신규)
 
-`server/web`는 브라우저에서 이미지를 업로드하고 Lambda를 직접 호출하는 Node.js 웹 예제입니다.
+`server/web`는 브라우저에서 이미지를 업로드하고, 같은 Node.js 백엔드 프로세스의 `/api/*` 엔드포인트가 Rekognition 로직을 직접 실행하는 웹 예제입니다.
 
 ```bash
 cd server
@@ -128,25 +128,28 @@ npm run web
 
 브라우저 접속: `http://localhost:3000`
 
+- WSL에서 실행해도 Windows 호스트 브라우저의 `http://localhost:3000`으로 접속할 수 있도록 웹 서버는 기본적으로 `0.0.0.0:3000`에 바인딩됩니다.
+- `localhost` 포워딩이 안 되는 환경이면 WSL 가상 IP(`eth0`)로 직접 접속하세요. 예: `http://172.29.x.x:3000`
+- 일반적으로 Windows의 `vEthernet (WSL)`는 `172.29.x.x/20`, WSL의 `eth0`도 같은 `172.29.x.x/20` 대역을 사용하므로 Windows 브라우저에서 WSL IP로 직접 접근할 수 있습니다.
+- `3000` 포트가 이미 사용 중이면 `WEB_PORT=3001 npm run web`처럼 다른 포트로 실행하세요.
+- 접속이 안 되면 WSL 안에서 `curl http://127.0.0.1:3000`이 먼저 되는지 확인해 보세요.
+- WSL IP 확인: `ip -4 addr show eth0`
+
 필요 환경 변수:
 
 ```env
 AWS_REGION=ap-northeast-2
-S3_BUCKET_NAME=polly-bucket-edumgt
-LAMBDA_COMPARE_UPLOAD_FUNCTION=rekognition-face-compare-upload
-LAMBDA_TEXT_FUNCTION=rekognition-text-detect
 ```
 ### 오류의 경우 필요한 확인
 
 ```
 aws sts get-caller-identity --region ap-northeast-2
-aws lambda list-functions --region ap-northeast-2 --query "Functions[?FunctionName=='rekognition-face-compare-upload'].FunctionName" --output text
-aws lambda get-function --region ap-northeast-2 --function-name rekognition-face-compare-upload
+aws configure list
 ```
 
 
-- **이미지 유사성 비교**: source/target 이미지를 업로드해 CompareFaces Lambda 호출
-- **텍스트 추출**: 단일 이미지를 업로드해 DetectText Lambda 호출
+- **이미지 유사성 비교**: source/target 이미지를 업로드해 Node.js BE API가 Rekognition `CompareFaces` 호출
+- **텍스트 추출**: 단일 이미지를 업로드해 Node.js BE API가 Rekognition `DetectText` 호출
 
 ---
 

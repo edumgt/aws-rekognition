@@ -125,7 +125,7 @@ init_bucket() {
 
 upload_samples() {
   log "Uploading known sample assets from ${UPLOAD_DIR}"
-  for f in sample.png face1.png face2.png face3.png face4.png; do
+  for f in sample.png face1.png face2.jpg face3.png face4.jpg face5.png face6.png; do
     if [[ -f "${UPLOAD_DIR}/${f}" ]]; then
       run_aws s3 cp "${UPLOAD_DIR}/${f}" "s3://${BUCKET_NAME}/training/${f}"
     else
@@ -180,8 +180,12 @@ package_lambda() {
   log "Packaging Lambda source files"
   (
     cd server
-    zip -qr "../${upload_zip}" lambda/uploadFacesHandler.js src node_modules package.json package-lock.json
-    zip -qr "../${compare_zip}" lambda/compareFacesHandler.js src node_modules package.json package-lock.json
+    zip -qr "../${upload_zip}" \
+      lambda/uploadFacesHandler.js src node_modules package.json package-lock.json \
+      face1.png face2.jpg face3.png face4.jpg face5.png face6.png sample.png
+    zip -qr "../${compare_zip}" \
+      lambda/compareFacesHandler.js src node_modules package.json package-lock.json \
+      face1.png face2.jpg face3.png face4.jpg face5.png face6.png sample.png
     zip -qr "../${compare_upload_zip}" lambda/compareUploadedFacesHandler.js src node_modules package.json package-lock.json
     zip -qr "../${text_zip}" lambda/detectTextHandler.js src node_modules package.json package-lock.json
     zip -qr "../${face_collection_zip}" lambda/faceCollectionHandler.js src node_modules package.json package-lock.json
@@ -201,6 +205,7 @@ upsert_lambda() {
     run_aws lambda update-function-code \
       --function-name "${function_name}" \
       --zip-file "fileb://${zip_file}" >/dev/null
+    run_aws lambda wait function-updated-v2 --function-name "${function_name}"
 
     run_aws lambda update-function-configuration \
       --function-name "${function_name}" \
@@ -209,6 +214,7 @@ upsert_lambda() {
       --timeout "${LAMBDA_TIMEOUT}" \
       --memory-size "${LAMBDA_MEMORY_SIZE}" \
       --environment "Variables={S3_BUCKET_NAME=${BUCKET_NAME}}" >/dev/null
+    run_aws lambda wait function-updated-v2 --function-name "${function_name}"
   else
     if [[ -z "${LAMBDA_ROLE_ARN}" ]]; then
       echo "LAMBDA_ROLE_ARN is required to create a new Lambda function." >&2
@@ -225,6 +231,7 @@ upsert_lambda() {
       --memory-size "${LAMBDA_MEMORY_SIZE}" \
       --zip-file "fileb://${zip_file}" \
       --environment "Variables={S3_BUCKET_NAME=${BUCKET_NAME}}" >/dev/null
+    run_aws lambda wait function-active-v2 --function-name "${function_name}"
   fi
 }
 

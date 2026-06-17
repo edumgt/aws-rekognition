@@ -1,7 +1,7 @@
 // AWS SDK 모듈을 로드해 S3/Rekognition 클라이언트를 생성할 때 사용합니다.
 const AWS = require('aws-sdk');
 // 환경 변수 기반 설정 값을 읽어오기 위한 내부 설정 모듈입니다.
-const { getConfig } = require('./config');
+const { getAwsRegion } = require('./config');
 
 // AWS 전역 설정을 한 번만 적용하기 위한 플래그입니다.
 let initialized = false;
@@ -11,8 +11,8 @@ function initializeAws() {
   // 이미 초기화한 경우에는 중복 설정을 건너뜁니다.
   if (initialized) return;
 
-  // 필수 환경 변수 검증을 통과한 설정 객체에서 리전을 가져옵니다.
-  const { region } = getConfig();
+  // Rekognition/S3 공통으로 필요한 AWS 리전만 먼저 검증합니다.
+  const region = getAwsRegion();
   // Lambda에서는 Execution Role 기반 자격증명을 사용해야 합니다.
   // accessKeyId/secretAccessKey를 수동 주입하지 않습니다.
   // 모든 AWS 서비스 클라이언트가 공통으로 사용할 기본 리전을 등록합니다.

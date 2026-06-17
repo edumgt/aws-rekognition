@@ -1,27 +1,20 @@
 // HTTP 서버 생성을 위해 Node 내장 모듈을 사용합니다.
 const http = require('http');
+// WSL 네트워크 인터페이스에서 접근 가능한 IPv4 주소를 찾기 위해 os 모듈을 사용합니다.
+const os = require('os');
 // 정적 파일 존재 확인/스트리밍을 위해 fs 모듈을 사용합니다.
 const fs = require('fs');
 // 경로 정규화를 위해 path 모듈을 사용합니다.
 const path = require('path');
-// Lambda 호출을 위해 AWS SDK를 사용합니다.
-const AWS = require('aws-sdk');
 // Linux/WSL 런타임에서만 웹 데모를 시작하도록 보호합니다.
 const { ensureLinuxRuntime } = require('../src/runtimeGuard');
-// 공통 환경 설정 유틸리티를 불러옵니다.
-const { getConfig } = require('../src/config');
+// 기존 백엔드 로직을 재사용하기 위해 로컬 핸들러를 불러옵니다.
+const { handler: compareUploadedFacesHandler } = require('../lambda/compareUploadedFacesHandler');
+// 텍스트 추출 로컬 핸들러입니다.
+const { handler: detectTextHandler } = require('../lambda/detectTextHandler');
 
 // Windows Node.js로 직접 실행되는 실수를 빠르게 차단합니다.
 ensureLinuxRuntime('web');
-
-// AWS 리전은 환경 변수 우선, 없으면 공통 설정에서 가져옵니다.
-const region = process.env.AWS_REGION || getConfig().region;
-// Lambda Invoke API를 사용할 클라이언트를 초기화합니다.
-const lambda = new AWS.Lambda({ region });
-// 얼굴 비교 Lambda 함수명(환경 변수로 오버라이드 가능)입니다.
-const compareFunctionName = process.env.LAMBDA_COMPARE_UPLOAD_FUNCTION || 'rekognition-face-compare-upload';
-// 텍스트 추출 Lambda 함수명(환경 변수로 오버라이드 가능)입니다.
-const textFunctionName = process.env.LAMBDA_TEXT_FUNCTION || 'rekognition-text-detect';
 
 // 정적 웹 리소스(index.html, css, js)가 위치한 디렉터리 절대 경로입니다.
 const publicDir = path.resolve(__dirname, 'public');
@@ -59,28 +52,40 @@ function parseRequestBody(req) {
   });
 }
 
-// Lambda invoke 응답(Payload)을 파싱해 {statusCode, body} 형태로 정규화합니다.
-function parseLambdaPayload(response) {
-  // Payload가 Buffer/Uint8Array일 수 있으므로 UTF-8 문자열로 변환합니다.
-  const payloadText = response.Payload ? Buffer.from(response.Payload).toString('utf-8') : '{}';
-  // 최상위 payload(JSON 문자열)를 객체로 파싱합니다.
-  const payload = payloadText ? JSON.parse(payloadText) : {};
-  // Lambda proxy 형식이라면 body를 한 번 더 파싱하고, 아니면 payload 자체를 사용합니다.
-  const body = payload.body ? JSON.parse(payload.body) : payload;
+// 기존 Lambda 스타일 핸들러를 현재 Node.js BE API 안에서 재사용합니다.
+async function runApiHandler(handler, body) {
+  // API Gateway 프록시 이벤트와 최대한 비슷한 입력으로 호출합니다.
+  const response = await handler({ body: JSON.stringify(body) });
+  // 반환 statusCode/body를 HTTP 응답에 맞는 형태로 정규화합니다.
+  const payload = typeof response?.body === 'string' ? JSON.parse(response.body) : response?.body || {};
 
-  // statusCode 기본값을 200으로 보정해 반환합니다.
   return {
-    statusCode: Number(payload.statusCode || 200),
-    body,
+    statusCode: Number(response?.statusCode || 200),
+    body: payload,
   };
 }
 
-// Lambda proxy 이벤트 형태로 감싸는 빌더 함수입니다.
-function buildLambdaEvent(body) {
-  // API Gateway 프록시와 동일하게 body를 문자열 JSON으로 전달합니다.
-  return {
-    body: JSON.stringify(body),
-  };
+// WSL/리눅스에서 외부에서 접근 가능한 대표 IPv4 주소를 찾습니다.
+function getAccessibleIpv4() {
+  // eth0가 있으면 우선 사용하고, 없으면 다른 외부 IPv4를 찾습니다.
+  const interfaces = os.networkInterfaces();
+  const candidates = [];
+
+  for (const [name, entries] of Object.entries(interfaces)) {
+    for (const entry of entries || []) {
+      if (entry.family !== 'IPv4' || entry.internal) {
+        continue;
+      }
+
+      candidates.push({
+        name,
+        address: entry.address,
+        cidr: entry.cidr,
+      });
+    }
+  }
+
+  return candidates.find((entry) => entry.name === 'eth0') || candidates[0] || null;
 }
 
 // /api 외 경로에 대해 정적 파일을 제공하는 핸들러입니다.
@@ -124,26 +129,14 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { message: 'sourceImageBase64, targetImageBase64 값이 필요합니다.' });
       }
 
-      // 비교 Lambda를 동기 호출(RequestResponse)합니다.
-      const response = await lambda
-        .invoke({
-          // 호출 대상 함수 이름입니다.
-          FunctionName: compareFunctionName,
-          // 결과를 기다리는 동기 호출 모드입니다.
-          InvocationType: 'RequestResponse',
-          // Lambda가 기대하는 이벤트 구조로 payload를 전달합니다.
-          Payload: JSON.stringify(buildLambdaEvent({
-            sourceImageBase64: body.sourceImageBase64,
-            targetImageBase64: body.targetImageBase64,
-            similarityThreshold: Number(body.similarityThreshold || 80),
-          })),
-        })
-        .promise();
-
-      // Lambda 응답을 표준 JSON 응답 형태로 변환합니다.
-      const lambdaResult = parseLambdaPayload(response);
-      // Lambda가 반환한 status/body를 그대로 클라이언트에 전달합니다.
-      return sendJson(res, lambdaResult.statusCode, lambdaResult.body);
+      // 기존 compare 핸들러를 현재 Node.js 백엔드 프로세스 안에서 직접 실행합니다.
+      const apiResult = await runApiHandler(compareUploadedFacesHandler, {
+        sourceImageBase64: body.sourceImageBase64,
+        targetImageBase64: body.targetImageBase64,
+        similarityThreshold: Number(body.similarityThreshold || 80),
+      });
+      // 백엔드 핸들러 결과를 그대로 프런트에 반환합니다.
+      return sendJson(res, apiResult.statusCode, apiResult.body);
     }
 
     // 텍스트 추출 API 엔드포인트입니다.
@@ -155,22 +148,12 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { message: 'imageBase64 값이 필요합니다.' });
       }
 
-      // 텍스트 추출 Lambda를 동기 호출합니다.
-      const response = await lambda
-        .invoke({
-          // 호출 대상 함수 이름입니다.
-          FunctionName: textFunctionName,
-          // 결과를 기다리는 동기 호출 모드입니다.
-          InvocationType: 'RequestResponse',
-          // imageBase64만 포함한 proxy 이벤트를 전달합니다.
-          Payload: JSON.stringify(buildLambdaEvent({ imageBase64: body.imageBase64 })),
-        })
-        .promise();
-
-      // Lambda 응답을 status/body 형태로 정규화합니다.
-      const lambdaResult = parseLambdaPayload(response);
+      // 텍스트 추출도 동일하게 로컬 백엔드 핸들러를 직접 실행합니다.
+      const apiResult = await runApiHandler(detectTextHandler, {
+        imageBase64: body.imageBase64,
+      });
       // 정규화된 결과를 그대로 JSON으로 반환합니다.
-      return sendJson(res, lambdaResult.statusCode, lambdaResult.body);
+      return sendJson(res, apiResult.statusCode, apiResult.body);
     }
 
     // API가 아닌 요청은 정적 파일로 처리합니다.
@@ -181,9 +164,30 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// WSL에서 Windows 호스트 브라우저로 접속되도록 기본 바인딩 주소를 0.0.0.0로 둡니다.
+const host = process.env.WEB_HOST || '0.0.0.0';
 // 웹 서버 포트는 환경 변수 우선, 기본값은 3000입니다.
 const port = Number(process.env.WEB_PORT || 3000);
+
+// 포트 충돌처럼 자주 겪는 시작 실패 원인을 더 이해하기 쉽게 안내합니다.
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use. Stop the existing process or run with WEB_PORT=<other-port>.`);
+    process.exit(1);
+  }
+
+  console.error(error.message);
+  process.exit(1);
+});
+
 // 서버를 시작하고 접속 URL을 콘솔에 출력합니다.
-server.listen(port, () => {
-  console.log(`Web demo started: http://localhost:${port}`);
+server.listen(port, host, () => {
+  const browserHost = host === '0.0.0.0' ? 'localhost' : host;
+  console.log(`Web demo + Node BE API started: http://${browserHost}:${port} (bind ${host}:${port})`);
+
+  const accessibleIpv4 = getAccessibleIpv4();
+  if (accessibleIpv4) {
+    console.log(`WSL IPv4: ${accessibleIpv4.cidr}`);
+    console.log(`Open from Windows browser via WSL virtual IP: http://${accessibleIpv4.address}:${port}`);
+  }
 });

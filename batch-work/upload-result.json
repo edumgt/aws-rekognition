@@ -1,1 +1,1 @@
-{"statusCode":200,"body":"{\"message\":\"Face image upload completed\",\"uploaded\":[],\"skipped\":[\"face1.png\",\"face2.png\",\"face3.png\",\"face4.png\"]}"}
+{"statusCode":200,"body":"{\"message\":\"Face image upload completed\",\"uploaded\":[\"training/face1.png\",\"training/face2.jpg\",\"training/face3.png\",\"training/face4.jpg\",\"training/face5.png\",\"training/face6.png\"],\"skipped\":[]}"}
