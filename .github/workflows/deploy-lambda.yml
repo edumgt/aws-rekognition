@@ -1,4 +1,4 @@
-name: Deploy Lambda Functions
+name: Deploy Lambda Functions & FE
 
 on:
   push:
@@ -12,8 +12,11 @@ on:
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   NODE_VERSION: '18'
+  CLOUDFRONT_DISTRIBUTION_ID: EWR0TS02XHGPK
+  S3_FE_PATH: s3://www.edumgt.co.kr/public/
 
 jobs:
+  # ── 1. Lambda 배포 (기존 job 유지) ───────────────────────────
   deploy:
     name: Package & Deploy Lambda
     runs-on: ubuntu-latest
@@ -81,10 +84,50 @@ jobs:
         env:
           FUNCTION_NAME: ${{ secrets[matrix.function_name_secret] }}
         run: |
-          # Wait until the previous update is complete before updating config
           aws lambda wait function-updated \
             --function-name "$FUNCTION_NAME"
           aws lambda update-function-configuration \
             --function-name "$FUNCTION_NAME" \
             --handler "${{ matrix.handler }}" \
             --runtime nodejs18.x
+
+  # ── 2. FE 배포 + CloudFront 무효화 ───────────────────────────
+  deploy-fe:
+    name: Deploy FE to S3 & Invalidate CloudFront
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync FE to S3
+        run: |
+          aws s3 sync server/web/public/ ${{ env.S3_FE_PATH }} \
+            --region ${{ env.AWS_REGION }} \
+            --delete \
+            --cache-control "no-cache, no-store, must-revalidate" \
+            --metadata-directive REPLACE
+
+      - name: Invalidate CloudFront cache
+        id: invalidate
+        run: |
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/public/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+          echo "Invalidation ID: $INVALIDATION_ID"
+          echo "invalidation_id=$INVALIDATION_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for CloudFront invalidation to complete
+        run: |
+          aws cloudfront wait invalidation-completed \
+            --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --id ${{ steps.invalidate.outputs.invalidation_id }}

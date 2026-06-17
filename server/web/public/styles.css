@@ -463,6 +463,39 @@ pre {
 
 .setting-summary strong { color: var(--oc-section-title); }
 
+/* API summary */
+.api-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.api-row {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.api-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--oc-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.api-row code {
+  font-size: 11px;
+  color: #1a73e8;
+  word-break: break-all;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
 /* Footer */
 .offcanvas-footer {
   display: flex;

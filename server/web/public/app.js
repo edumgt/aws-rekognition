@@ -1,31 +1,14 @@
 // =========================================================
-//  Settings — persist backend mode & lambda function names
+//  API 엔드포인트 설정
+//  S3 정적 서빙 환경 — Node.js 서버 없이 API Gateway 직접 호출
 // =========================================================
 
-const SETTINGS_KEY = 'rekognition_settings';
+const API_SETTINGS_KEY = 'rekognition_api_base';
+const DEFAULT_API_BASE = 'https://ab8004tdfe.execute-api.ap-northeast-2.amazonaws.com';
 
-const DEFAULT_SETTINGS = {
-  mode: 'local',          // 'local' | 'lambda'
-  awsRegion: '',          // AWS region (overrides server env AWS_REGION)
-  lambdaCompareFn: '',    // Lambda function name/ARN for compare
-  lambdaTextFn: '',       // Lambda function name/ARN for text extract
-};
-
-function loadSettings() {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : { ...DEFAULT_SETTINGS };
-  } catch (_) {
-    return { ...DEFAULT_SETTINGS };
-  }
+function getApiBase() {
+  return localStorage.getItem(API_SETTINGS_KEY) || DEFAULT_API_BASE;
 }
-
-function saveSettings(settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-}
-
-// Current in-memory settings (source of truth during the session)
-let appSettings = loadSettings();
 
 // =========================================================
 //  Offcanvas
@@ -33,25 +16,14 @@ let appSettings = loadSettings();
 
 const offcanvas = document.getElementById('settingsPanel');
 const backdrop = document.getElementById('offcanvasBackdrop');
-const backendModeSelect = document.getElementById('backendMode');
-const awsRegionInput = document.getElementById('awsRegion');
-const lambdaSettingsSection = document.getElementById('lambdaSettings');
-const lambdaCompareFnInput = document.getElementById('lambdaCompareFn');
-const lambdaTextFnInput = document.getElementById('lambdaTextFn');
-const modeDescEl = document.getElementById('modeDescription');
-const settingSummaryEl = document.getElementById('settingSummary');
-
-const MODE_DESCRIPTIONS = {
-  local: '서버 프로세스 내부에서 Lambda 핸들러 JS 파일을 직접 실행합니다.',
-  lambda: '배포된 AWS Lambda 함수를 서버가 SDK로 원격 호출합니다.',
-};
+const apiBaseInput = document.getElementById('apiBaseUrl');
 
 function openOffcanvas() {
-  syncOffcanvasFromSettings(appSettings);
+  apiBaseInput.value = getApiBase();
+  updateApiSummary();
   offcanvas.classList.add('open');
   backdrop.classList.add('visible');
   document.body.style.overflow = 'hidden';
-  backendModeSelect.focus();
 }
 
 function closeOffcanvas() {
@@ -60,57 +32,14 @@ function closeOffcanvas() {
   document.body.style.overflow = '';
 }
 
-function syncOffcanvasFromSettings(settings) {
-  backendModeSelect.value = settings.mode;
-  awsRegionInput.value = settings.awsRegion;
-  lambdaCompareFnInput.value = settings.lambdaCompareFn;
-  lambdaTextFnInput.value = settings.lambdaTextFn;
-  updateLambdaVisibility(settings.mode);
-  updateSummary(settings);
-}
-
-function updateLambdaVisibility(mode) {
-  if (mode === 'lambda') {
-    lambdaSettingsSection.classList.add('active');
-  } else {
-    lambdaSettingsSection.classList.remove('active');
-  }
-  modeDescEl.textContent = MODE_DESCRIPTIONS[mode] || '';
-}
-
-function updateSummary(settings) {
-  const modeLabel = settings.mode === 'lambda' ? 'AWS Lambda 호출' : '로컬 JS 실행';
-  let html = `<strong>리전:</strong> ${settings.awsRegion || '(서버 환경변수 사용)'}`;
-  html += `<br/><strong>모드:</strong> ${modeLabel}`;
-  if (settings.mode === 'lambda') {
-    html += `<br/><strong>비교 함수:</strong> ${settings.lambdaCompareFn || '(미설정)'}`;
-    html += `<br/><strong>텍스트 함수:</strong> ${settings.lambdaTextFn || '(미설정)'}`;
-  }
-  settingSummaryEl.innerHTML = html;
-}
-
-function applySettingsToUI(settings) {
-  const modeIndicator = document.getElementById('modeIndicator');
-  const modeLabelEl = document.getElementById('modeLabel');
-  const dot = modeIndicator.querySelector('.mode-dot');
-
-  if (settings.mode === 'lambda') {
-    modeLabelEl.textContent = 'AWS Lambda 호출';
-    dot.className = 'mode-dot lambda';
-  } else {
-    modeLabelEl.textContent = '로컬 JS 실행';
-    dot.className = 'mode-dot local';
-  }
-
-  const btnCompare = document.getElementById('btnCompare');
-  const btnText = document.getElementById('btnText');
-  if (settings.mode === 'lambda') {
-    btnCompare.textContent = 'Lambda로 비교하기';
-    btnText.textContent = 'Lambda로 텍스트 추출';
-  } else {
-    btnCompare.textContent = '비교하기 (로컬)';
-    btnText.textContent = '텍스트 추출 (로컬)';
-  }
+function updateApiSummary() {
+  const base = getApiBase();
+  const el = document.getElementById('apiSummary');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="api-row"><span class="api-label">얼굴 비교</span><code>${base}/compare</code></div>
+    <div class="api-row"><span class="api-label">텍스트 추출</span><code>${base}/extract-text</code></div>
+  `;
 }
 
 function showToast(message) {
@@ -127,53 +56,50 @@ function showToast(message) {
   toast._timer = setTimeout(() => toast.classList.remove('show'), 2200);
 }
 
-// Offcanvas event listeners
 document.getElementById('settingsBtn').addEventListener('click', openOffcanvas);
 document.getElementById('closeSettings').addEventListener('click', closeOffcanvas);
 backdrop.addEventListener('click', closeOffcanvas);
-
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && offcanvas.classList.contains('open')) closeOffcanvas();
 });
 
-backendModeSelect.addEventListener('change', () => {
-  updateLambdaVisibility(backendModeSelect.value);
-});
-
 document.getElementById('saveSettings').addEventListener('click', () => {
-  const newSettings = {
-    mode: backendModeSelect.value,
-    awsRegion: awsRegionInput.value.trim(),
-    lambdaCompareFn: lambdaCompareFnInput.value.trim(),
-    lambdaTextFn: lambdaTextFnInput.value.trim(),
-  };
-
-  if (newSettings.mode === 'lambda') {
-    if (!newSettings.lambdaCompareFn || !newSettings.lambdaTextFn) {
-      showToast('Lambda 함수 이름을 모두 입력하세요.');
-      return;
-    }
+  const val = apiBaseInput.value.trim().replace(/\/$/, '');
+  if (!val) {
+    showToast('API Base URL을 입력하세요.');
+    return;
   }
-
-  appSettings = newSettings;
-  saveSettings(appSettings);
-  updateSummary(appSettings);
-  applySettingsToUI(appSettings);
+  localStorage.setItem(API_SETTINGS_KEY, val);
+  updateApiSummary();
   closeOffcanvas();
-  showToast('설정이 저장되었습니다.');
+  showToast('저장되었습니다.');
 });
 
 document.getElementById('resetSettings').addEventListener('click', () => {
-  appSettings = { ...DEFAULT_SETTINGS };
-  saveSettings(appSettings);
-  syncOffcanvasFromSettings(appSettings);
-  applySettingsToUI(appSettings);
-  showToast('초기화되었습니다.');
+  localStorage.removeItem(API_SETTINGS_KEY);
+  apiBaseInput.value = DEFAULT_API_BASE;
+  updateApiSummary();
+  showToast('기본값으로 초기화되었습니다.');
 });
 
 // =========================================================
-//  API helpers
+//  HTTP helper
 // =========================================================
+
+async function postJson(url, body) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(data?.message || `HTTP ${response.status}`);
+    err.payload = data;
+    throw err;
+  }
+  return data;
+}
 
 async function fileToBase64(file) {
   if (!file) throw new Error('파일을 선택하세요.');
@@ -190,89 +116,23 @@ function setStatus(id, text) {
   if (el) el.textContent = text || '';
 }
 
-async function postJson(url, body) {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = data?.message || data?.error || `HTTP ${response.status}`;
-    const error = new Error(message);
-    error.payload = data;
-    throw error;
-  }
-  return data;
-}
-
-function buildApiBody(baseBody) {
-  return {
-    ...baseBody,
-    _mode: appSettings.mode,
-    _awsRegion: appSettings.awsRegion || undefined,
-    _lambdaCompareFn: appSettings.lambdaCompareFn,
-    _lambdaTextFn: appSettings.lambdaTextFn,
-  };
-}
-
-// =========================================================
-//  Response normalization & rendering utilities
-// =========================================================
-
-function normalizeCompareResponse(raw) {
-  if (!raw) return raw;
-  if (typeof raw === 'object' && typeof raw.statusCode === 'number' && raw.body) {
-    try {
-      const parsed = typeof raw.body === 'string' ? JSON.parse(raw.body) : raw.body;
-      return parsed;
-    } catch (_) {
-      return { message: String(raw.body) };
-    }
-  }
-  return raw;
-}
-
-function pct(n) {
-  if (n === null || n === undefined || Number.isNaN(Number(n))) return '-';
-  return (Number(n) * 100).toFixed(1) + '%';
-}
-
-function fmt(n, digits = 2) {
-  if (n === null || n === undefined || Number.isNaN(Number(n))) return '-';
-  return Number(n).toFixed(digits);
-}
-
-function makeVerdict({ matched, requestedSimilarityThreshold, maxSimilarity }) {
-  const thr = Number(requestedSimilarityThreshold ?? 0);
-  const max = Number(maxSimilarity ?? 0);
-  if (matched) {
-    return `임계값 ${thr}% 기준으로 최대 유사도 ${fmt(max, 2)}% → 동일 인물로 판단됩니다.`;
-  }
-  return `임계값 ${thr}% 기준으로 최대 유사도 ${fmt(max, 2)}% → 동일 인물로 보기 어렵습니다.`;
-}
-
 function escapeHtml(str) {
   return String(str)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 }
 
 // =========================================================
 //  Image preview & canvas
 // =========================================================
 
-const sourceInput = document.getElementById('sourceImage');
-const targetInput = document.getElementById('targetImage');
+const sourceInput   = document.getElementById('sourceImage');
+const targetInput   = document.getElementById('targetImage');
 const thresholdInput = document.getElementById('similarityThreshold');
 const sourcePreview = document.getElementById('sourcePreview');
 const targetPreview = document.getElementById('targetPreview');
 const canvas = document.getElementById('bboxCanvas');
-const ctx = canvas.getContext('2d');
+const ctx    = canvas.getContext('2d');
 
 let sourceImageBase64 = null;
 let targetImageBase64 = null;
@@ -285,37 +145,30 @@ function previewImage(file, imgEl) {
   imgEl.onload = () => URL.revokeObjectURL(url);
 }
 
-function syncCanvasToTargetImage() {
+function syncCanvas() {
   const rect = targetPreview.getBoundingClientRect();
-  canvas.width = Math.max(1, Math.round(rect.width));
+  canvas.width  = Math.max(1, Math.round(rect.width));
   canvas.height = Math.max(1, Math.round(rect.height));
-  canvas.style.width = rect.width + 'px';
+  canvas.style.width  = rect.width  + 'px';
   canvas.style.height = rect.height + 'px';
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
 function drawBoundingBox(box, label, isMatch) {
   if (!box) return;
-  const w = canvas.width;
-  const h = canvas.height;
-  const x = box.Left * w;
-  const y = box.Top * h;
-  const bw = box.Width * w;
-  const bh = box.Height * h;
-
+  const w = canvas.width, h = canvas.height;
+  const x = box.Left * w, y = box.Top * h;
+  const bw = box.Width * w, bh = box.Height * h;
   ctx.lineWidth = 3;
   ctx.strokeStyle = isMatch ? '#10b981' : '#ef4444';
   ctx.strokeRect(x, y, bw, bh);
-
   if (label) {
     ctx.font = '14px system-ui';
-    const pad = 6;
-    const tw = ctx.measureText(label).width;
-    const bx = x;
-    const by = Math.max(0, y - 22);
+    const pad = 6, tw = ctx.measureText(label).width;
+    const bx = x, by = Math.max(0, y - 22);
     ctx.fillStyle = isMatch ? '#10b981' : '#ef4444';
     ctx.fillRect(bx, by, tw + pad * 2, 20);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#fff';
     ctx.fillText(label, bx + pad, by + 15);
   }
 }
@@ -324,11 +177,37 @@ function drawBoundingBox(box, label, isMatch) {
 //  Compare result renderer
 // =========================================================
 
+function fmt(n, d = 2) {
+  if (n == null || Number.isNaN(Number(n))) return '-';
+  return Number(n).toFixed(d);
+}
+
+function pct(n) {
+  if (n == null || Number.isNaN(Number(n))) return '-';
+  return (Number(n) * 100).toFixed(1) + '%';
+}
+
+function makeVerdict({ matched, requestedSimilarityThreshold: thr, maxSimilarity: max }) {
+  const t = Number(thr ?? 0), m = Number(max ?? 0);
+  return matched
+    ? `임계값 ${t}% 기준으로 최대 유사도 ${fmt(m)}% → 동일 인물로 판단됩니다.`
+    : `임계값 ${t}% 기준으로 최대 유사도 ${fmt(m)}% → 동일 인물로 보기 어렵습니다.`;
+}
+
+function normalizeCompareResponse(raw) {
+  if (!raw) return raw;
+  if (typeof raw.statusCode === 'number' && raw.body) {
+    try { return typeof raw.body === 'string' ? JSON.parse(raw.body) : raw.body; }
+    catch (_) { return { message: String(raw.body) }; }
+  }
+  return raw;
+}
+
 function renderCompareResult(raw) {
   const resultEl = document.getElementById('compareResult');
   const data = normalizeCompareResponse(raw);
   lastCompareResult = data;
-  syncCanvasToTargetImage();
+  syncCanvas();
 
   if (!data || data.message) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -340,69 +219,46 @@ function renderCompareResult(raw) {
           <summary>원본 응답(JSON)</summary>
           <pre>${escapeHtml(JSON.stringify(raw, null, 2))}</pre>
         </details>
-      </div>
-    `;
+      </div>`;
     return;
   }
 
   const matches = Array.isArray(data.matches) ? [...data.matches] : [];
   matches.sort((a, b) => Number(b.similarity || 0) - Number(a.similarity || 0));
-
   const matched = Boolean(data.matched);
   const thr = Number(data.requestedSimilarityThreshold ?? 0);
   const max = Number(data.maxSimilarity ?? (matches[0]?.similarity ?? 0));
-  const verdict = makeVerdict({ matched, requestedSimilarityThreshold: thr, maxSimilarity: max });
-  const badge = matched ? '<span class="badge ok">MATCH</span>' : '<span class="badge no">NO MATCH</span>';
 
   resultEl.innerHTML = `
     <div class="card">
-      ${badge}
-      <div class="verdict">${verdict}</div>
-
+      ${matched ? '<span class="badge ok">MATCH</span>' : '<span class="badge no">NO MATCH</span>'}
+      <div class="verdict">${makeVerdict({ matched, requestedSimilarityThreshold: thr, maxSimilarity: max })}</div>
       <div class="kvs">
         <div class="kv"><div class="k">Threshold</div><div class="v">${fmt(thr, 0)}%</div></div>
-        <div class="kv"><div class="k">Max similarity</div><div class="v">${fmt(max, 2)}%</div></div>
+        <div class="kv"><div class="k">Max similarity</div><div class="v">${fmt(max)}%</div></div>
         <div class="kv"><div class="k">Matches</div><div class="v">${matches.length}</div></div>
         <div class="kv"><div class="k">Decision</div><div class="v">${matched ? 'PASS' : 'FAIL'}</div></div>
       </div>
-
       <table class="table">
-        <thead>
-          <tr>
-            <th>#</th><th>Similarity</th><th>Confidence</th>
-            <th>BoundingBox (Left, Top, Width, Height)</th>
-          </tr>
-        </thead>
+        <thead><tr><th>#</th><th>Similarity</th><th>Confidence</th><th>BoundingBox (L,T,W,H)</th></tr></thead>
         <tbody>
-          ${
-            matches.length
-              ? matches.map((m, i) => {
-                  const b = m.boundingBox || {};
-                  return `
-                    <tr>
-                      <td>${i + 1}</td>
-                      <td>${fmt(m.similarity, 2)}%</td>
-                      <td>${fmt(m.confidence, 2)}%</td>
-                      <td>${pct(b.Left)}, ${pct(b.Top)}, ${pct(b.Width)}, ${pct(b.Height)}</td>
-                    </tr>
-                  `;
-                }).join('')
-              : `<tr><td colspan="4">매칭 결과가 없습니다.</td></tr>`
-          }
+          ${matches.length
+            ? matches.map((m, i) => {
+                const b = m.boundingBox || {};
+                return `<tr><td>${i+1}</td><td>${fmt(m.similarity)}%</td><td>${fmt(m.confidence)}%</td>
+                        <td>${pct(b.Left)}, ${pct(b.Top)}, ${pct(b.Width)}, ${pct(b.Height)}</td></tr>`;
+              }).join('')
+            : '<tr><td colspan="4">매칭 결과가 없습니다.</td></tr>'}
         </tbody>
       </table>
-
       <details class="debug">
         <summary>원본 응답(JSON)</summary>
         <pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>
       </details>
-    </div>
-  `;
+    </div>`;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (matches[0]?.boundingBox) {
-    drawBoundingBox(matches[0].boundingBox, `${fmt(matches[0].similarity, 2)}%`, matched);
-  }
+  if (matches[0]?.boundingBox) drawBoundingBox(matches[0].boundingBox, `${fmt(matches[0].similarity)}%`, matched);
 }
 
 // =========================================================
@@ -411,13 +267,10 @@ function renderCompareResult(raw) {
 
 sourceInput.addEventListener('change', async () => {
   try {
-    const file = sourceInput.files?.[0];
-    previewImage(file, sourcePreview);
-    sourceImageBase64 = await fileToBase64(file);
+    previewImage(sourceInput.files?.[0], sourcePreview);
+    sourceImageBase64 = await fileToBase64(sourceInput.files?.[0]);
     setStatus('compareStatus', '');
-  } catch (e) {
-    setStatus('compareStatus', e.message);
-  }
+  } catch (e) { setStatus('compareStatus', e.message); }
 });
 
 targetInput.addEventListener('change', async () => {
@@ -426,95 +279,66 @@ targetInput.addEventListener('change', async () => {
     previewImage(file, targetPreview);
     targetImageBase64 = await fileToBase64(file);
     targetPreview.onload = () => {
-      syncCanvasToTargetImage();
-      if (lastCompareResult?.matches?.[0]?.boundingBox) {
-        renderCompareResult(lastCompareResult);
-      }
+      syncCanvas();
+      if (lastCompareResult?.matches?.[0]?.boundingBox) renderCompareResult(lastCompareResult);
     };
     setStatus('compareStatus', '');
-  } catch (e) {
-    setStatus('compareStatus', e.message);
-  }
+  } catch (e) { setStatus('compareStatus', e.message); }
 });
 
 // =========================================================
-//  Compare form submit
+//  Compare form — API Gateway 직접 호출
 // =========================================================
 
-document.getElementById('compareForm').addEventListener('submit', async (event) => {
-  event.preventDefault();
+document.getElementById('compareForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
   try {
-    const modeLabel = appSettings.mode === 'lambda' ? 'Lambda' : '로컬';
-    setStatus('compareStatus', `${modeLabel}로 비교 중...`);
+    setStatus('compareStatus', '비교 중...');
     document.getElementById('compareResult').innerHTML = '<div class="card">비교 중...</div>';
+    if (!sourceImageBase64 || !targetImageBase64) throw new Error('Source/Target 이미지를 모두 선택하세요.');
 
-    const similarityThreshold = Number(thresholdInput.value || 80);
-    if (!sourceImageBase64 || !targetImageBase64) {
-      throw new Error('Source/Target 이미지를 모두 선택하세요.');
-    }
-
-    if (appSettings.mode === 'lambda' && !appSettings.lambdaCompareFn) {
-      throw new Error('설정에서 Lambda 함수 이름을 먼저 입력하세요.');
-    }
-
-    const result = await postJson('/api/compare', buildApiBody({
+    const result = await postJson(`${getApiBase()}/compare`, {
       sourceImageBase64,
       targetImageBase64,
-      similarityThreshold,
-    }));
+      similarityThreshold: Number(thresholdInput.value || 80),
+    });
 
     renderCompareResult(result);
     setStatus('compareStatus', '');
-  } catch (error) {
-    renderCompareResult({ message: error.message, detail: error.payload || null });
+  } catch (err) {
+    renderCompareResult({ message: err.message, detail: err.payload || null });
     setStatus('compareStatus', '오류 발생');
   }
 });
 
 // =========================================================
-//  Text extract form submit
+//  Text form — API Gateway 직접 호출
 // =========================================================
 
-function renderJsonPre(id, payload) {
-  document.getElementById(id).textContent = JSON.stringify(payload, null, 2);
-}
-
-document.getElementById('textForm').addEventListener('submit', async (event) => {
-  event.preventDefault();
+document.getElementById('textForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
   try {
-    const modeLabel = appSettings.mode === 'lambda' ? 'Lambda' : '로컬';
-    setStatus('textStatus', `${modeLabel}로 추출 중...`);
-
-    if (appSettings.mode === 'lambda' && !appSettings.lambdaTextFn) {
-      throw new Error('설정에서 Lambda 함수 이름을 먼저 입력하세요.');
-    }
-
-    const file = document.getElementById('textImage').files[0];
-    const imageBase64 = await fileToBase64(file);
-
-    const result = await postJson('/api/extract-text', buildApiBody({ imageBase64 }));
-    renderJsonPre('textResult', result);
+    setStatus('textStatus', '추출 중...');
+    const imageBase64 = await fileToBase64(document.getElementById('textImage').files[0]);
+    const result = await postJson(`${getApiBase()}/extract-text`, { imageBase64 });
+    document.getElementById('textResult').textContent = JSON.stringify(result, null, 2);
     setStatus('textStatus', '');
-  } catch (error) {
-    renderJsonPre('textResult', { message: error.message });
+  } catch (err) {
+    document.getElementById('textResult').textContent = JSON.stringify({ message: err.message }, null, 2);
     setStatus('textStatus', '오류 발생');
   }
 });
 
 // =========================================================
-//  Resize handler
+//  Resize & init
 // =========================================================
 
 window.addEventListener('resize', () => {
   if (!targetPreview.src) return;
-  syncCanvasToTargetImage();
+  syncCanvas();
   if (lastCompareResult) renderCompareResult(lastCompareResult);
 });
 
-// =========================================================
-//  Init
-// =========================================================
-
-applySettingsToUI(appSettings);
+updateApiSummary();
 document.getElementById('compareResult').innerHTML =
   '<div class="card">이미지를 선택하면 결과가 여기에 표시됩니다.</div>';
