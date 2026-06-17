@@ -554,3 +554,43 @@ pre {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* ---- Text extraction result ---- */
+.text-result {
+  margin-top: 14px;
+  min-height: 0;
+}
+
+.text-result-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.text-lines {
+  margin: 0;
+  padding: 0 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.text-lines li {
+  background: #f8faff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 15px;
+  line-height: 1.5;
+  list-style: none;
+  margin-left: -20px;
+  padding-left: 12px;
+}
+
+.text-loading, .text-empty, .text-error {
+  font-size: 14px;
+  margin: 10px 0 0;
+}
+.text-empty { color: var(--muted); }
+.text-error { color: #dc2626; }

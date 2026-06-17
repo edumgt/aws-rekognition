@@ -317,14 +317,30 @@ document.getElementById('compareForm').addEventListener('submit', async (e) => {
 
 document.getElementById('textForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const resultEl = document.getElementById('textResult');
   try {
     setStatus('textStatus', '추출 중...');
+    resultEl.innerHTML = '<p class="text-loading">분석 중...</p>';
+
     const imageBase64 = await fileToBase64(document.getElementById('textImage').files[0]);
     const result = await postJson(`${getApiBase()}/extract-text`, { imageBase64 });
-    document.getElementById('textResult').textContent = JSON.stringify(result, null, 2);
+
+    const lines = (result.textDetections || [])
+      .filter((d) => d.type === 'LINE')
+      .map((d) => d.detectedText);
+
+    if (lines.length === 0) {
+      resultEl.innerHTML = '<p class="text-empty">텍스트를 감지하지 못했습니다.</p>';
+    } else {
+      resultEl.innerHTML = `
+        <div class="text-result-header">감지된 텍스트 ${lines.length}줄</div>
+        <ol class="text-lines">
+          ${lines.map((t) => `<li>${escapeHtml(t)}</li>`).join('')}
+        </ol>`;
+    }
     setStatus('textStatus', '');
   } catch (err) {
-    document.getElementById('textResult').textContent = JSON.stringify({ message: err.message }, null, 2);
+    resultEl.innerHTML = `<p class="text-error">${escapeHtml(err.message)}</p>`;
     setStatus('textStatus', '오류 발생');
   }
 });
