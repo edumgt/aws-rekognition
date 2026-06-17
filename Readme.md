@@ -1,5 +1,7 @@
 # AWS Rekognition 실습 리팩토링 가이드 (Node.js + Lambda + Shell 자동화)
 
+![alt text](image.png)
+
 이 문서는 이 저장소를 **실습 중심으로 재구성**한 최신 가이드입니다.  
 목표는 아래 3가지를 한 번에 수행하는 것입니다.
  
