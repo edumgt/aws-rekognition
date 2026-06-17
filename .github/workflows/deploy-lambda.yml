@@ -9,6 +9,12 @@ on:
 
   workflow_dispatch:
 
+  schedule:
+    # KST = UTC+9 | 금일(2026-06-17) 14:35~18:00 KST = 05:35~09:00 UTC | 5분 간격
+    - cron: '35,40,45,50,55 5 17 6 *'   # 14:35~14:55 KST
+    - cron: '*/5 6,7,8 17 6 *'          # 15:00~17:55 KST
+    - cron: '0 9 17 6 *'                # 18:00 KST
+
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   NODE_VERSION: '18'
