@@ -82,6 +82,10 @@ jobs:
         env:
           FUNCTION_NAME: ${{ secrets[matrix.function_name_secret] }}
         run: |
+          if [ -z "$FUNCTION_NAME" ]; then
+            echo "⚠️  Secret '${{ matrix.function_name_secret }}' not set — skipping deploy for ${{ matrix.description }}"
+            exit 0
+          fi
           aws lambda update-function-code \
             --function-name "$FUNCTION_NAME" \
             --zip-file fileb://lambda-${{ matrix.description }}.zip
@@ -90,6 +94,10 @@ jobs:
         env:
           FUNCTION_NAME: ${{ secrets[matrix.function_name_secret] }}
         run: |
+          if [ -z "$FUNCTION_NAME" ]; then
+            echo "⚠️  Secret '${{ matrix.function_name_secret }}' not set — skipping config for ${{ matrix.description }}"
+            exit 0
+          fi
           aws lambda wait function-updated \
             --function-name "$FUNCTION_NAME"
           aws lambda update-function-configuration \
